@@ -346,7 +346,7 @@ mp3_type_find (GstTypeFind *tf, gpointer unused)
 	head_data = gst_type_find_peek (tf, offset, 4);
 	if (!head_data)
 	  break;
-	head = GUINT32_FROM_BE((guint32) *head_data);
+	head = GUINT32_FROM_BE(*((guint32 *) head_data));
         if (!(length = mp3_type_frame_length_from_header (head, &layer,
 			&channels, &bitrate, &samplerate))) {
 	  break;
@@ -438,7 +438,7 @@ qt_type_find (GstTypeFind *tf, gpointer unused)
       tip = GST_TYPE_FIND_MAXIMUM;
       break;
     }
-    offset += ((guint32) *data);
+    offset += *((guint32 *) data);
   }
   if (tip > 0) {
     gst_type_find_suggest (tf, tip, QT_CAPS);

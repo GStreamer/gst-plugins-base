@@ -77,6 +77,9 @@ plugin_init (GModule *module, GstPlugin *plugin)
   GstElementFactory *enc, *file;
   GstCaps *raw_caps, *vorbis_caps, *raw_caps2;
 
+  if (!gst_library_load ("gstbytestream"))
+    return FALSE;
+
   gst_plugin_set_longname (plugin, "The OGG Vorbis Codec");
 
   /* create an elementfactory for the vorbisenc element */
