@@ -461,6 +461,21 @@ wav_type_find (GstTypeFind *tf, gpointer unused)
   }
 }
       
+/*** audio/x-aiff *********************************************/
+
+#define AIFF_CAPS GST_CAPS_NEW ("aiff_type_find", "audio/x-aiff", NULL)
+static void
+aiff_type_find (GstTypeFind *tf, gpointer unused)
+{
+  guint8 *data = gst_type_find_peek (tf, 0, 4);
+
+  if (data && memcmp (data, "FORM", 4) == 0) {
+    data += 8;
+    if (memcmp (data, "AIFF", 4) == 0)
+      gst_type_find_suggest (tf, GST_TYPE_FIND_MAXIMUM, AIFF_CAPS);
+  }
+}
+
 /*** audio/x-mod *********************************************/
 
 #define MOD_CAPS gst_caps_new ("mod_type_find", "audio/x-mod", NULL)
@@ -644,6 +659,7 @@ plugin_init (GModule *module, GstPlugin *plugin)
   static gchar * swf_exts[] = {"swf", "swfl", NULL};
   static gchar * utf8_exts[] = {"txt", NULL};
   static gchar * wav_exts[] = {"wav", NULL};
+  static gchar * aiff_exts[] = {"aiff", "aif", "aifc", NULL};
 
   gst_type_find_factory_register (plugin, "video/x-ms-asf", GST_ELEMENT_RANK_SECONDARY,
 	  asf_type_find, asf_exts, ASF_CAPS, NULL);
@@ -677,6 +693,8 @@ plugin_init (GModule *module, GstPlugin *plugin)
 	  utf8_type_find, utf8_exts, UTF8_CAPS, NULL);
   gst_type_find_factory_register (plugin, "audio/x-wav", GST_ELEMENT_RANK_SECONDARY,
 	  wav_type_find, wav_exts, WAV_CAPS, NULL);
+  gst_type_find_factory_register (plugin, "audio/x-aiff", GST_ELEMENT_RANK_SECONDARY,
+	  aiff_type_find, aiff_exts, AIFF_CAPS, NULL);
 
   return TRUE;
 }
