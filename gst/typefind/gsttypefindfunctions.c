@@ -463,23 +463,153 @@ mp3_type_find (GstTypeFind *tf, gpointer unused)
     GST_CAPS_NEW ("mpeg_type_find", "video/mpeg",			\
 	    	  "systemstream", GST_PROPS_BOOLEAN (TRUE),		\
 		  "mpegversion", GST_PROPS_INT (version)))
-
+#define IS_MPEG_HEADER(data)		((((guint8 *)data)[0] == 0x00) &&	\
+					 (((guint8 *)data)[1] == 0x00) &&	\
+					 (((guint8 *)data)[2] == 0x01) &&	\
+					 (((guint8 *)data)[3] == 0xBA))
+#define IS_MPEG_SYSTEM_HEADER(data)	((((guint8 *)data)[0] == 0x00) &&	\
+					 (((guint8 *)data)[1] == 0x00) &&	\
+					 (((guint8 *)data)[2] == 0x01) &&	\
+					 (((guint8 *)data)[3] == 0xBB))
+#define IS_MPEG_PACKET_HEADER(data)	((((guint8 *)data)[0] == 0x00) &&	\
+					 (((guint8 *)data)[1] == 0x00) &&	\
+					 (((guint8 *)data)[2] == 0x01) &&	\
+					 ((((guint8 *)data)[3] & 0x80) == 0x80))
 static void
-mpeg_sys_type_find (GstTypeFind *tf, gpointer unused)
+mpeg2_sys_type_find (GstTypeFind *tf, gpointer unused)
 {
-  static guint8 header[] = {0x00, 0x00, 0x01, 0xBA};
   guint8 *data = gst_type_find_peek (tf, 0, 5);
 
-  if (data && (memcmp (data, header, 4)) == 0) {
+  if (data && IS_MPEG_HEADER (data)) {
     if ((data[4] & 0xC0) == 0x40) {
       /* type 2 */
       gst_type_find_suggest (tf, GST_TYPE_FIND_MAXIMUM, MPEG_SYS_CAPS (2));
-    } else if ((data[4] & 0xf0) == 0x20) {
-      /* type 1 */
-      gst_type_find_suggest (tf, GST_TYPE_FIND_MAXIMUM, MPEG_SYS_CAPS (1));
     }
   }
 };
+/* ATTANTION: ugly return value:
+ * 0 -  invalid data
+ * 1 - not enough data
+ * anything else - size until next package
+ */
+static guint
+mpeg1_parse_header (GstTypeFind *tf, guint64 offset)
+{
+  guint8 *data = gst_type_find_peek (tf, offset, 18);
+  guint size;
+  
+  if (!data) {
+    GST_LOG ("couldn't get 18 bytes to parse MPEG header");
+    return 1;
+  }
+  
+  /* check header */
+  if (!IS_MPEG_HEADER (data)) {
+    GST_LOG ("This isn't an MPEG header");
+    return 0;
+  }
+  data += 4;
+
+  /* check marker bits */
+  if ((*data & 0xF1) != 0x21) {
+    GST_LOG ("marker bits in byte 4 don't match");
+    return 0;
+  }
+  data += 2;
+  if ((*data & 0x01) != 0x01) {
+    GST_LOG ("marker bits in byte 6 don't match");
+    return 0;
+  }
+  data += 2;
+  if ((*data & 0x01) != 0x01) {
+    GST_LOG ("marker bits in byte 8 don't match");
+    return 0;
+  }
+  data ++;
+  if ((*data & 0x80) != 0x80) {
+    GST_LOG ("marker bits in byte 9 don't match");
+    return 0;
+  }
+  data += 2;
+  if ((*data & 0x01) != 0x01) {
+    GST_LOG ("marker bits in byte 11 don't match");
+    return 0;
+  }
+  data++;
+  
+  if (!IS_MPEG_PACKET_HEADER (data) &&
+      !IS_MPEG_SYSTEM_HEADER (data)) {
+    GST_LOG ("MPEG packet header doesn't match: %8.8X", GUINT32_FROM_BE (*((guint32 *) data)));
+    return 0;
+  }
+    
+  data += 4;
+  
+  size = GUINT16_FROM_BE (*((guint16 *) data)) + 18;
+
+  GST_DEBUG ("found mpeg1 packet at offset %"G_GUINT64_FORMAT" with size %u", offset, size);
+  return size;
+}
+/* calculation of possibility to identify random data as mpeg systemstream:
+ * bits that must match in header detection:		65
+ * chance that random data is identifed:		1/2^65
+ * chance that GST_MPEG_TYPEFIND_TRY_HEADERS headers are identified:	
+ *					1/2^(65*GST_MPEG_TYPEFIND_TRY_HEADERS)
+ * chance that this happens in GST_MPEG_TYPEFIND_TRY_SYNC bytes:
+ *					1-(1-1/2^(65*GST_MPEG_TYPEFIND_TRY_HEADERS))^GST_MPEG_TYPEFIND_TRY_SYNC
+ * for current values:
+ *					1-(1-1/2^(65*2)^50000
+ *  and that value is way smaller than 0,1%
+ */
+#define GST_MPEG_TYPEFIND_TRY_HEADERS 2
+#define GST_MPEG_TYPEFIND_TRY_SYNC (GST_TYPE_FIND_MAXIMUM * 500) /* 50kB */
+#define GST_MPEG_TYPEFIND_SYNC_SIZE 2048
+static void
+mpeg1_sys_type_find (GstTypeFind *tf, gpointer unused)
+{
+  guint8 *data;
+  guint size = 0;
+  guint64 skipped = 0;
+
+  while (skipped < GST_MPEG_TYPEFIND_TRY_SYNC) {
+    if (size < 4) {
+      data = gst_type_find_peek (tf, skipped, GST_MPEG_TYPEFIND_SYNC_SIZE);
+      if (!data)
+	break;
+      size = GST_MPEG_TYPEFIND_SYNC_SIZE;
+    }
+    if (IS_MPEG_HEADER (data)) {
+      /* found packet start code */
+      guint found = 0;
+      guint packet_size;
+      guint64 offset = skipped;
+      
+      while (found < GST_MPEG_TYPEFIND_TRY_HEADERS) {
+	packet_size = mpeg1_parse_header (tf, offset);
+	if (packet_size <= 1)
+	  break;
+	offset += packet_size;
+	found++;
+      }
+      g_assert (found <= GST_MPEG_TYPEFIND_TRY_HEADERS);
+      if (found == GST_MPEG_TYPEFIND_TRY_HEADERS ||
+	  packet_size == 1) {
+	guint probability = found * GST_TYPE_FIND_MAXIMUM * 
+			    (GST_MPEG_TYPEFIND_TRY_SYNC - skipped) /
+			    GST_MPEG_TYPEFIND_TRY_HEADERS / GST_MPEG_TYPEFIND_TRY_SYNC;
+	
+	if (probability < GST_TYPE_FIND_MINIMUM)
+	  probability = GST_TYPE_FIND_MINIMUM;
+	g_assert (probability <= GST_TYPE_FIND_MAXIMUM);
+	gst_type_find_suggest (tf, probability, MPEG_SYS_CAPS (1)); 
+	return;
+      }
+    }
+    data++;
+    skipped++;
+    size--;
+  }
+}
 
 /*** video/quicktime***********************************************************/
 
@@ -775,8 +905,10 @@ plugin_init (GModule *module, GstPlugin *plugin)
 	  mod_type_find, mod_exts, MOD_CAPS, NULL);
   gst_type_find_factory_register (plugin, "audio/mpeg", GST_ELEMENT_RANK_PRIMARY,
 	  mp3_type_find, mp3_exts, MP3_CAPS (0), NULL);
-  gst_type_find_factory_register (plugin, "video/mpeg", GST_ELEMENT_RANK_PRIMARY,
-	  mpeg_sys_type_find, mpeg_sys_exts, MPEG_SYS_CAPS (0), NULL);
+  gst_type_find_factory_register (plugin, "video/mpeg1", GST_ELEMENT_RANK_PRIMARY,
+	  mpeg1_sys_type_find, mpeg_sys_exts, MPEG_SYS_CAPS (1), NULL);
+  gst_type_find_factory_register (plugin, "video/mpeg2", GST_ELEMENT_RANK_SECONDARY,
+	  mpeg2_sys_type_find, mpeg_sys_exts, MPEG_SYS_CAPS (2), NULL);
   gst_type_find_factory_register (plugin, "application/ogg", GST_ELEMENT_RANK_PRIMARY,
 	  ogg_type_find, ogg_exts, OGG_CAPS, NULL);
   gst_type_find_factory_register (plugin, "video/quicktime", GST_ELEMENT_RANK_SECONDARY,
