@@ -130,7 +130,6 @@ struct _GstXvImageSink {
 
   GstClockTime time;
  
-  GstBufferPool *bufferpool;
   GMutex *pool_lock;
   GSList *image_pool;
 };

@@ -81,15 +81,6 @@ static void                  gst_v4lsrc_get_property (GObject        *object,
 /* state handling */
 static GstElementStateReturn gst_v4lsrc_change_state (GstElement     *element);
 
-/* bufferpool functions */
-static GstBuffer*            gst_v4lsrc_buffer_new   (GstBufferPool  *pool,
-                                                      guint64        offset,
-                                                      guint          size,
-                                                      gpointer       user_data);
-static void                  gst_v4lsrc_buffer_free  (GstBufferPool  *pool,
-						      GstBuffer      *buf,
-						      gpointer       user_data);
-
 /* set_clock function for a/V sync */
 static void                  gst_v4lsrc_set_clock    (GstElement     *element,
                                                       GstClock       *clock);
@@ -199,14 +190,6 @@ gst_v4lsrc_init (GstV4lSrc *v4lsrc)
   gst_pad_set_getcaps_function (v4lsrc->srcpad, gst_v4lsrc_getcaps);
   gst_pad_set_link_function (v4lsrc->srcpad, gst_v4lsrc_srcconnect);
   gst_pad_set_convert_function (v4lsrc->srcpad, gst_v4lsrc_srcconvert);
-
-  v4lsrc->bufferpool = gst_buffer_pool_new(
-		  NULL, 
-		  NULL,
-		  (GstBufferPoolBufferNewFunction)gst_v4lsrc_buffer_new,
-		  NULL,
-		  (GstBufferPoolBufferFreeFunction)gst_v4lsrc_buffer_free,
-		  v4lsrc);
 
   v4lsrc->buffer_size = 0;
 
@@ -549,14 +532,6 @@ gst_v4lsrc_get (GstPad *pad)
       (fps = gst_v4lsrc_get_fps(v4lsrc)) == 0)
     return NULL;
 
-  buf = gst_buffer_new_from_pool(v4lsrc->bufferpool, 0, 0);
-  if (!buf)
-  {
-    gst_element_error(GST_ELEMENT(v4lsrc),
-      "Failed to create a new GstBuffer");
-    return NULL;
-  }
-
   if (v4lsrc->need_writes > 0) {
     /* use last frame */
     num = v4lsrc->last_frame;
@@ -614,6 +589,8 @@ gst_v4lsrc_get (GstPad *pad)
     v4lsrc->use_num_times[num] = 1;
   }
 
+  buf = gst_buffer_new ();
+  GST_BUFFER_FLAG_SET (buf, GST_BUFFER_READONLY);
   GST_BUFFER_DATA(buf) = gst_v4lsrc_get_buffer(v4lsrc, num);
   GST_BUFFER_SIZE(buf) = v4lsrc->buffer_size;
   if (v4lsrc->use_fixed_fps)
@@ -740,6 +717,7 @@ gst_v4lsrc_change_state (GstElement *element)
 }
 
 
+#if 0
 static GstBuffer*
 gst_v4lsrc_buffer_new (GstBufferPool *pool,
 		       guint64 	     offset,
@@ -763,8 +741,9 @@ gst_v4lsrc_buffer_new (GstBufferPool *pool,
 
   return buffer;
 }
+#endif
 
-
+#if 0
 static void
 gst_v4lsrc_buffer_free (GstBufferPool *pool, GstBuffer *buf, gpointer user_data)
 {
@@ -791,6 +770,7 @@ gst_v4lsrc_buffer_free (GstBufferPool *pool, GstBuffer *buf, gpointer user_data)
   /* free struct */
   gst_buffer_default_free(buf);
 }
+#endif
 
 
 static void

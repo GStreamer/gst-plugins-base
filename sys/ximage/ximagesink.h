@@ -113,7 +113,6 @@ struct _GstXImageSink {
   /* Unused */
   gint pixel_width, pixel_height;
  
-  GstBufferPool *bufferpool;
   GMutex *pool_lock;
   GSList *image_pool;
 };

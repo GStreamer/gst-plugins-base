@@ -72,12 +72,6 @@ static void                  gst_v4lmjpegsink_get_property (GObject             
 static GstElementStateReturn gst_v4lmjpegsink_change_state (GstElement           *element);
 static void		     gst_v4lmjpegsink_set_clock    (GstElement *element, GstClock *clock);
 
-/* bufferpool functions */
-static GstBuffer*            gst_v4lmjpegsink_buffer_new   (GstBufferPool  *pool,
-                                                            guint64        offset,
-                                                            guint          size,
-                                                            gpointer       user_data);
-
 
 static GstPadTemplate *sink_template;
 
@@ -192,14 +186,6 @@ gst_v4lmjpegsink_init (GstV4lMjpegSink *v4lmjpegsink)
   v4lmjpegsink->bufsize = 256;
 
   GST_FLAG_SET(v4lmjpegsink, GST_ELEMENT_THREAD_SUGGESTED);
-
-  v4lmjpegsink->bufferpool = gst_buffer_pool_new(
-				  NULL, 
-				  NULL,
-				  (GstBufferPoolBufferNewFunction)gst_v4lmjpegsink_buffer_new,
-				  NULL,
-				  NULL,
-				  v4lmjpegsink);
 }
 
 
@@ -280,6 +266,7 @@ gst_v4lmjpegsink_chain (GstPad    *pad,
     gst_clock_id_free (id);
   }
 
+#if 0
   if (GST_BUFFER_POOL(buf) == v4lmjpegsink->bufferpool)
   {
     num = GPOINTER_TO_INT(GST_BUFFER_POOL_PRIVATE(buf));
@@ -287,6 +274,7 @@ gst_v4lmjpegsink_chain (GstPad    *pad,
   }
   else
   {
+#endif
     /* check size */
     if (GST_BUFFER_SIZE(buf) > v4lmjpegsink->breq.size)
     {
@@ -301,7 +289,9 @@ gst_v4lmjpegsink_chain (GstPad    *pad,
     memcpy(gst_v4lmjpegsink_get_buffer(v4lmjpegsink, num),
       GST_BUFFER_DATA(buf), GST_BUFFER_SIZE(buf));
     gst_v4lmjpegsink_play_frame(v4lmjpegsink, num);
+#if 0
   }
+#endif
 
   g_signal_emit(G_OBJECT(v4lmjpegsink),gst_v4lmjpegsink_signals[SIGNAL_FRAME_DISPLAYED],0);
 
@@ -309,6 +299,7 @@ gst_v4lmjpegsink_chain (GstPad    *pad,
 }
 
 
+#if 0
 static GstBuffer *
 gst_v4lmjpegsink_buffer_new (GstBufferPool *pool,
                              guint64        offset,
@@ -344,6 +335,7 @@ gst_v4lmjpegsink_buffer_new (GstBufferPool *pool,
 
   return buffer;
 }
+#endif
 
 
 static void

@@ -73,8 +73,6 @@ struct _GstVideotestsrc {
   int type;
   GstClock *clock;
 
-  GstBufferPool *pool;
-
   void (*make_image)(GstVideotestsrc *v, unsigned char *dest, int w, int h);
 };
 
@@ -82,7 +80,7 @@ struct _GstVideotestsrcClass {
   GstElementClass parent_class;
 };
 
-GType gst_videotestsrc_get_type(void);
+GType gst_videotestsrc_get_type(void) G_GNUC_CONST;
 
 G_END_DECLS
 

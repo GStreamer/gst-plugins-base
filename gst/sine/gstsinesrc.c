@@ -188,7 +188,6 @@ gst_sinesrc_init (GstSineSrc *src)
   src->samples_per_buffer=1024;
   src->timestamp=0LLU;
   src->offset=0LLU;
-  src->bufpool=NULL;
   
   src->seq = 0;
 
@@ -316,13 +315,11 @@ gst_sinesrc_get (GstPad *pad)
   g_return_val_if_fail (pad != NULL, NULL);
   src = GST_SINESRC (gst_pad_get_parent (pad));
 
-  if (src->bufpool == NULL) {
-    src->bufpool = gst_buffer_pool_get_default (2 * src->samples_per_buffer, 8);
-  }
-
   tdiff = src->samples_per_buffer * GST_SECOND / src->samplerate;
 
-  buf = (GstBuffer *) gst_buffer_new_from_pool (src->bufpool, 0, 0);
+  /* FIXME the 1024 is arbitrary */
+  buf = gst_buffer_new_and_alloc (1024);
+
   GST_BUFFER_TIMESTAMP(buf) = src->timestamp;
   GST_BUFFER_OFFSET (buf) = src->offset;
   GST_BUFFER_DURATION (buf) = tdiff;

@@ -654,12 +654,14 @@ gst_ximagesink_chain (GstPad *pad, GstData *_data)
     gst_clock_id_free (id);
   }
   
+#if 0
   /* If we have a pool and the image is from this pool, simply put it. */
   if ( (ximagesink->bufferpool) &&
        (GST_BUFFER_BUFFERPOOL (buf) == ximagesink->bufferpool) )
     gst_ximagesink_ximage_put (ximagesink, GST_BUFFER_POOL_PRIVATE (buf));
   else /* Else we have to copy the data into our private image, */
     {  /* if we have one... */
+#endif
       if (ximagesink->ximage)
         {
           memcpy (ximagesink->ximage->ximage->data, 
@@ -673,13 +675,16 @@ gst_ximagesink_chain (GstPad *pad, GstData *_data)
           gst_element_error (GST_ELEMENT (ximagesink), "no image to draw");
           return;
         }
+#if 0
     }
+#endif
   
   gst_buffer_unref (buf);
     
   gst_ximagesink_handle_xevents (ximagesink, pad);
 }
 
+#if 0
 static GstBuffer*
 gst_ximagesink_buffer_new (GstBufferPool *pool,  
 		           gint64 location, guint size, gpointer user_data)
@@ -761,6 +766,7 @@ gst_ximagesink_buffer_free (GstBufferPool *pool,
 
   gst_buffer_default_free (buffer);
 }
+#endif
 
 static void
 gst_ximagesink_imagepool_clear (GstXImageSink *ximagesink)
@@ -776,30 +782,6 @@ gst_ximagesink_imagepool_clear (GstXImageSink *ximagesink)
     }
   
   g_mutex_unlock(ximagesink->pool_lock);
-}
-
-static GstBufferPool*
-gst_ximagesink_get_bufferpool (GstPad *pad)
-{
-  GstXImageSink *ximagesink;
-  
-  ximagesink = GST_XIMAGESINK (gst_pad_get_parent (pad));
-
-  if (!ximagesink->bufferpool) {
-    ximagesink->bufferpool = gst_buffer_pool_new (
-                NULL,		/* free */
-                NULL,		/* copy */
-                (GstBufferPoolBufferNewFunction) gst_ximagesink_buffer_new,
-                NULL,		/* buffer copy, the default is fine */
-                (GstBufferPoolBufferFreeFunction) gst_ximagesink_buffer_free,
-                ximagesink);
-
-    ximagesink->image_pool = NULL;
-  }
-
-  gst_buffer_pool_ref (ximagesink->bufferpool);
-
-  return ximagesink->bufferpool;
 }
 
 /* Interfaces stuff */
@@ -942,9 +924,6 @@ gst_ximagesink_dispose (GObject *object)
   g_mutex_free (ximagesink->x_lock);
   g_mutex_free (ximagesink->pool_lock);
 
-  if (ximagesink->bufferpool) 
-    gst_buffer_pool_free (ximagesink->bufferpool);
-
   G_OBJECT_CLASS (parent_class)->dispose (object);
 }
 
@@ -964,8 +943,6 @@ gst_ximagesink_init (GstXImageSink *ximagesink)
                              gst_ximagesink_sinkconnect);
   gst_pad_set_getcaps_function (GST_VIDEOSINK_PAD (ximagesink),
                                 gst_ximagesink_getcaps);
-  gst_pad_set_bufferpool_function (GST_VIDEOSINK_PAD (ximagesink),
-                                   gst_ximagesink_get_bufferpool);
 
   ximagesink->xcontext = NULL;
   ximagesink->xwindow = NULL;

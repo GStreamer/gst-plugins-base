@@ -303,7 +303,6 @@ gst_adder_init (GstAdder *adder)
 
   /* keep track of the sinkpads requested */
  
-  adder->bufpool = NULL;
   adder->numsinkpads = 0;
   adder->input_channels = NULL;
 }
@@ -396,16 +395,9 @@ gst_adder_loop (GstElement *element)
 
   adder = GST_ADDER (element);
 
-  if (adder->bufpool == NULL) {
-    adder->bufpool = gst_pad_get_bufferpool (adder->srcpad);
-    if (adder->bufpool == NULL) {
-      adder->bufpool = gst_buffer_pool_get_default (GST_ADDER_BUFFER_SIZE,
-	                                            GST_ADDER_NUM_BUFFERS);
-    }
-  }
-
   /* get new output buffer */
-  buf_out = gst_buffer_new_from_pool (adder->bufpool, 0, 0);
+  /* FIXME the 1024 is arbitrary */
+  buf_out = gst_buffer_new_and_alloc (1024);
 
   if (buf_out == NULL) {
     gst_element_error (GST_ELEMENT (adder), "could not get new output buffer");
@@ -575,10 +567,6 @@ gst_adder_change_state (GstElement *element)
     case GST_STATE_PAUSED_TO_PLAYING:
       break;
     case GST_STATE_PLAYING_TO_PAUSED:
-      if (adder->bufpool) {
-	gst_buffer_pool_unref (adder->bufpool);
-	adder->bufpool = NULL;
-      }
       break;
     case GST_STATE_PAUSED_TO_READY:
       break;

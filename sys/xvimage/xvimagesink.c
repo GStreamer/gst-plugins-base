@@ -797,12 +797,14 @@ gst_xvimagesink_chain (GstPad *pad, GstData *data)
     gst_clock_id_free (id);
   }
   
+#if 0
   /* If we have a pool and the image is from this pool, simply put it. */
   if ( (xvimagesink->bufferpool) &&
        (GST_BUFFER_BUFFERPOOL (buf) == xvimagesink->bufferpool) )
     gst_xvimagesink_xvimage_put (xvimagesink, GST_BUFFER_POOL_PRIVATE (buf));
   else /* Else we have to copy the data into our private image, */
     {  /* if we have one... */
+#endif
       if (xvimagesink->xvimage)
         {
           memcpy (xvimagesink->xvimage->xvimage->data, 
@@ -816,7 +818,9 @@ gst_xvimagesink_chain (GstPad *pad, GstData *data)
           gst_element_error (GST_ELEMENT (xvimagesink), "no image to draw");
           return;
         }
+#if 0
     }
+#endif
   /* set correct time for next buffer */
   if (!GST_BUFFER_TIMESTAMP_IS_VALID (buf) && xvimagesink->framerate > 0) {
     xvimagesink->time += GST_SECOND / xvimagesink->framerate;
@@ -827,6 +831,7 @@ gst_xvimagesink_chain (GstPad *pad, GstData *data)
   gst_xvimagesink_handle_xevents (xvimagesink, pad);
 }
 
+#if 0
 static GstBuffer*
 gst_xvimagesink_buffer_new (GstBufferPool *pool,  
 		           gint64 location, guint size, gpointer user_data)
@@ -909,6 +914,7 @@ gst_xvimagesink_buffer_free (GstBufferPool *pool,
 
   gst_buffer_default_free (buffer);
 }
+#endif
 
 static void
 gst_xvimagesink_imagepool_clear (GstXvImageSink *xvimagesink)
@@ -924,30 +930,6 @@ gst_xvimagesink_imagepool_clear (GstXvImageSink *xvimagesink)
     }
   
   g_mutex_unlock(xvimagesink->pool_lock);
-}
-
-static GstBufferPool*
-gst_xvimagesink_get_bufferpool (GstPad *pad)
-{
-  GstXvImageSink *xvimagesink;
-  
-  xvimagesink = GST_XVIMAGESINK (gst_pad_get_parent (pad));
-
-  if (!xvimagesink->bufferpool) {
-    xvimagesink->bufferpool = gst_buffer_pool_new (
-                NULL,		/* free */
-                NULL,		/* copy */
-                (GstBufferPoolBufferNewFunction) gst_xvimagesink_buffer_new,
-                NULL,		/* buffer copy, the default is fine */
-                (GstBufferPoolBufferFreeFunction) gst_xvimagesink_buffer_free,
-                xvimagesink);
-
-    xvimagesink->image_pool = NULL;
-  }
-
-  gst_buffer_pool_ref (xvimagesink->bufferpool);
-
-  return xvimagesink->bufferpool;
 }
 
 /* Interfaces stuff */
@@ -1083,9 +1065,6 @@ gst_xvimagesink_dispose (GObject *object)
   g_mutex_free (xvimagesink->x_lock);
   g_mutex_free (xvimagesink->pool_lock);
 
-  if (xvimagesink->bufferpool) 
-    gst_buffer_pool_free (xvimagesink->bufferpool);
-
   G_OBJECT_CLASS (parent_class)->dispose (object);
 }
 
@@ -1105,8 +1084,6 @@ gst_xvimagesink_init (GstXvImageSink *xvimagesink)
                              gst_xvimagesink_sinkconnect);
   gst_pad_set_getcaps_function (GST_VIDEOSINK_PAD (xvimagesink),
                                 gst_xvimagesink_getcaps);
-  gst_pad_set_bufferpool_function (GST_VIDEOSINK_PAD (xvimagesink),
-                                   gst_xvimagesink_get_bufferpool);
 
   xvimagesink->xcontext = NULL;
   xvimagesink->xwindow = NULL;

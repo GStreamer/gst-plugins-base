@@ -111,16 +111,6 @@ static void		volume_chain_int16         (GstPad *pad, GstData *_data);
 static GstElementClass *parent_class = NULL;
 /*static guint gst_filter_signals[LAST_SIGNAL] = { 0 }; */
 
-static GstBufferPool*
-volume_get_bufferpool (GstPad *pad)
-{
-  GstVolume *filter;
-
-  filter = GST_VOLUME (gst_pad_get_parent (pad));
-
-  return gst_pad_get_bufferpool (filter->srcpad);
-}
-
 static GstPadLinkReturn
 volume_connect (GstPad *pad, GstCaps2 *caps)
 {
@@ -228,7 +218,6 @@ volume_init (GstVolume *filter)
 {
   filter->sinkpad = gst_pad_new_from_template(volume_sink_factory (),"sink");
   gst_pad_set_link_function(filter->sinkpad,volume_connect);
-  gst_pad_set_bufferpool_function(filter->sinkpad,volume_get_bufferpool);
   filter->srcpad = gst_pad_new_from_template(volume_src_factory (),"src");
   gst_pad_set_link_function(filter->srcpad,volume_connect);
   

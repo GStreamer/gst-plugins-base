@@ -254,8 +254,6 @@ gst_videotestsrc_src_link (GstPad * pad, const GstCaps2 * caps)
 
   GST_DEBUG ("size %d x %d", videotestsrc->width, videotestsrc->height);
 
-  videotestsrc->pool = gst_pad_get_bufferpool (videotestsrc->srcpad);
-
   return GST_PAD_LINK_OK;
 }
 
@@ -265,10 +263,6 @@ gst_videotestsrc_src_unlink (GstPad * pad)
   GstVideotestsrc *videotestsrc;
 
   videotestsrc = GST_VIDEOTESTSRC (gst_pad_get_parent (pad));
-
-  if (videotestsrc->pool) {
-    gst_buffer_pool_unref (videotestsrc->pool);
-  }
 }
 
 static GstElementStateReturn
@@ -367,7 +361,6 @@ gst_videotestsrc_init (GstVideotestsrc * videotestsrc)
   gst_pad_set_query_type_function (videotestsrc->srcpad,
 				   gst_videotestsrc_get_query_types);
 
-  videotestsrc->pool = NULL;
   gst_videotestsrc_set_pattern(videotestsrc, GST_VIDEOTESTSRC_SMPTE);
 
   videotestsrc->sync = TRUE;
@@ -446,18 +439,7 @@ gst_videotestsrc_get (GstPad * pad)
 
   GST_DEBUG ("size=%ld %dx%d", newsize, videotestsrc->width, videotestsrc->height);
 
-  buf = NULL;
-  if (videotestsrc->pool) {
-    buf = gst_buffer_new_from_pool (videotestsrc->pool, 0, 0);
-    /* if the buffer we get is too small, make our own */
-    if (buf && GST_BUFFER_SIZE (buf) < newsize){
-      gst_buffer_unref (buf);
-      buf = NULL;
-    }
-  }
-  if (!buf) {
-    buf = gst_buffer_new_and_alloc (newsize);
-  }
+  buf = gst_buffer_new_and_alloc (newsize);
   g_return_val_if_fail (GST_BUFFER_DATA (buf) != NULL, NULL);
 
   videotestsrc->make_image (videotestsrc, (void *) GST_BUFFER_DATA (buf),

@@ -75,7 +75,6 @@ struct _GstSineSrc {
   
   guint64 timestamp;
   guint64 offset;
-  GstBufferPool *bufpool;
 
   gdouble accumulator;
 };

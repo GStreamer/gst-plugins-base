@@ -92,15 +92,6 @@ static void                  gst_v4lmjpegsrc_set_clock    (GstElement     *eleme
 /* state handling */
 static GstElementStateReturn gst_v4lmjpegsrc_change_state (GstElement     *element);
 
-/* bufferpool functions */
-static GstBuffer*            gst_v4lmjpegsrc_buffer_new   (GstBufferPool  *pool,
-                                                           guint64        offset,
-                                                           guint          size,
-                                                           gpointer       user_data);
-static void                  gst_v4lmjpegsrc_buffer_free  (GstBufferPool  *pool,
-							   GstBuffer      *buf,
-                                                           gpointer       user_data);
-
 
 static GstPadTemplate *src_template;
 
@@ -238,14 +229,6 @@ gst_v4lmjpegsrc_init (GstV4lMjpegSrc *v4lmjpegsrc)
   gst_pad_set_getcaps_function (v4lmjpegsrc->srcpad, gst_v4lmjpegsrc_getcaps);
   gst_pad_set_link_function (v4lmjpegsrc->srcpad, gst_v4lmjpegsrc_srcconnect);
   gst_pad_set_convert_function (v4lmjpegsrc->srcpad, gst_v4lmjpegsrc_srcconvert);
-
-  v4lmjpegsrc->bufferpool = gst_buffer_pool_new(
-		  			NULL,
-					NULL,
-					(GstBufferPoolBufferNewFunction)gst_v4lmjpegsrc_buffer_new,
-					NULL,
-					(GstBufferPoolBufferFreeFunction)gst_v4lmjpegsrc_buffer_free,
-					v4lmjpegsrc);
 
 #if 0
   v4lmjpegsrc->frame_width = 0;
@@ -482,14 +465,6 @@ gst_v4lmjpegsrc_get (GstPad *pad)
       (fps = gst_v4lmjpegsrc_get_fps(v4lmjpegsrc)) == 0)
     return NULL;
 
-  buf = gst_buffer_new_from_pool(v4lmjpegsrc->bufferpool, 0, 0);
-  if (!buf)
-  {
-    gst_element_error(GST_ELEMENT(v4lmjpegsrc),
-      "Failed to create a new GstBuffer");
-    return NULL;
-  }
-
   if (v4lmjpegsrc->need_writes > 0) {
     /* use last frame */
     num = v4lmjpegsrc->last_frame;
@@ -559,8 +534,10 @@ gst_v4lmjpegsrc_get (GstPad *pad)
     v4lmjpegsrc->use_num_times[num] = 1;
   }
 
+  buf = gst_buffer_new ();
   GST_BUFFER_DATA(buf) = gst_v4lmjpegsrc_get_buffer(v4lmjpegsrc, num);
   GST_BUFFER_SIZE(buf) = v4lmjpegsrc->last_size;
+  GST_BUFFER_FLAG_SET (buf, GST_BUFFER_READONLY);
   if (v4lmjpegsrc->use_fixed_fps)
     GST_BUFFER_TIMESTAMP(buf) = v4lmjpegsrc->handled * GST_SECOND / fps;
   else /* calculate time based on our own clock */
@@ -743,6 +720,7 @@ gst_v4lmjpegsrc_set_clock (GstElement *element,
 }
 
 
+#if 0
 static GstBuffer*
 gst_v4lmjpegsrc_buffer_new (GstBufferPool *pool,
                             guint64       offset,
@@ -765,8 +743,9 @@ gst_v4lmjpegsrc_buffer_new (GstBufferPool *pool,
 
   return buffer;
 }
+#endif
 
-
+#if 0
 static void
 gst_v4lmjpegsrc_buffer_free (GstBufferPool *pool, GstBuffer *buf, gpointer user_data)
 {
@@ -793,3 +772,4 @@ gst_v4lmjpegsrc_buffer_free (GstBufferPool *pool, GstBuffer *buf, gpointer user_
   /* free the buffer struct et all */
   gst_buffer_default_free(buf);
 }
+#endif
