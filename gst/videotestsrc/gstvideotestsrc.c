@@ -237,8 +237,19 @@ gst_videotestsrc_get_capslist (void)
   int i;
 
   if (capslist)
-    return capslist;
+  {
+    GST_DEBUG (GST_CAT_CAPS, "static caps refcount: %d", capslist->refcount);
+    if (capslist->refcount > 0)
+      return capslist;
+    else
+    {
+      capslist = NULL;
+      /* FIXME: this indicates a refcounting bug somewhere */
+      g_print ("warning: videotestsrc: caplist refcount dropped to 0 !\n");
+    }
+}
 
+  GST_DEBUG (GST_CAT_CAPS, "initialising videotestsrc capslist");
   for (i = 0; i < n_fourccs; i++) {
     char *s = fourcc_list[i].fourcc;
     int fourcc = GST_MAKE_FOURCC (s[0], s[1], s[2], s[3]);
@@ -248,6 +259,7 @@ gst_videotestsrc_get_capslist (void)
 			 "format", GST_PROPS_FOURCC (fourcc),
 			 "width", GST_PROPS_INT (640),
 			 "height", GST_PROPS_INT (480));
+    GST_DEBUG (GST_CAT_CAPS, "new caps refcount: %d", caps->refcount);
     capslist = gst_caps_append (capslist, caps);
   }
 
@@ -262,13 +274,15 @@ gst_videotestsrc_getcaps (GstPad * pad, GstCaps * caps)
   vts = GST_VIDEOTESTSRC (gst_pad_get_parent (pad));
 
   if (vts->forced_format != 0) {
-    return GST_CAPS_NEW ("videotestsrc_filter",
+    GstCaps *caps;
+    caps = GST_CAPS_NEW ("videotestsrc_filter",
 			 "video/raw",
 			 "format", GST_PROPS_FOURCC (vts->forced_format),
 			 "width", GST_PROPS_INT (640),
 			 "height", GST_PROPS_INT (480));
   } else {
-    return gst_videotestsrc_get_capslist ();
+    GST_DEBUG (GST_CAT_CAPS, "reffing and returning capslist");
+    return gst_caps_ref (gst_videotestsrc_get_capslist ());
   }
 }
 
@@ -311,13 +325,19 @@ gst_videotestsrc_get (GstPad * pad)
   videotestsrc = GST_VIDEOTESTSRC (gst_pad_get_parent (pad));
 
   newsize = (videotestsrc->width * videotestsrc->height * videotestsrc->bpp) >> 3;
-
   GST_DEBUG (0, "size=%ld %dx%d", newsize, videotestsrc->width, videotestsrc->height);
 
   buf = NULL;
   if (videotestsrc->pool) {
-    buf = gst_buffer_new_from_pool (videotestsrc->pool, 0, 0);
+    buf = gst_buffer_new_from_pool (videotestsrc->pool, 0, newsize);
+    /* if the buffer we get is too small, make our own */
+    if (GST_BUFFER_SIZE (buf) < newsize)
+    {
+      gst_buffer_unref (buf);
+      buf = NULL;
+    }
   }
+  
   if (!buf) {
     buf = gst_buffer_new ();
     GST_BUFFER_SIZE (buf) = newsize;
@@ -328,6 +348,7 @@ gst_videotestsrc_get (GstPad * pad)
   videotestsrc->timestamp += videotestsrc->interval;
   GST_BUFFER_TIMESTAMP (buf) = videotestsrc->timestamp;
 
+  g_assert (GST_IS_VIDEOTESTSRC (videotestsrc));
   videotestsrc->make_image (videotestsrc, (void *) GST_BUFFER_DATA (buf),
 			    videotestsrc->width, videotestsrc->height);
 
@@ -354,6 +375,7 @@ gst_videotestsrc_set_property (GObject * object, guint prop_id, const GValue * v
       src->height = g_value_get_int (value);
       break;
     case ARG_FOURCC:
+      /* FIXME */
       s = g_value_get_string (value);
       if (strlen (s) == 4) {
 	src->forced_format = GST_MAKE_FOURCC (s[0], s[1], s[2], s[3]);
@@ -386,7 +408,6 @@ gst_videotestsrc_get_property (GObject * object, guint prop_id, GValue * value, 
       g_value_set_int (value, src->height);
       break;
     case ARG_FOURCC:
-      /* FIXME */
       /* g_value_set_int (value, src->forced_format); */
       break;
     case ARG_RATE:
@@ -706,6 +727,7 @@ gst_videotestsrc_smpte_yuv (GstVideotestsrc * v, unsigned char *dest, int w, int
   paintinfo pi;
   paintinfo *p = &pi;
 
+  g_assert (GST_IS_VIDEOTESTSRC (v));
   p->width = w;
   p->height = h;
   index = paintrect_find_fourcc (v->format);
