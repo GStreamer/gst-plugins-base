@@ -21,6 +21,10 @@
 #ifndef __GST_ALSA_H__
 #define __GST_ALSA_H__
 
+/* request the old API */
+#define ALSA_PCM_OLD_HW_PARAMS_API
+#define ALSA_PCM_OLD_SW_PARAMS_API
+
 #include <alsa/asoundlib.h>
 #include <gst/gst.h>
 #include <gst/bytestream/bytestream.h>
