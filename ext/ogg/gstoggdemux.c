@@ -1192,6 +1192,23 @@ gst_ogg_demux_perform_seek (GstOggDemux * ogg, gint64 pos)
   /* now grab the stream lock so that streaming cannot continue */
   GST_STREAM_LOCK (ogg->sinkpad);
 
+  {
+    gint i;
+
+    /* reset all ogg streams now, need to do this from within the lock to
+     * make sure the streaming thread is not messing with the stream */
+    for (i = 0; i < ogg->chains->len; i++) {
+      GstOggChain *chain = g_array_index (ogg->chains, GstOggChain *, i);
+      gint j;
+
+      for (j = 0; j < chain->streams->len; j++) {
+        GstOggPad *pad = g_array_index (chain->streams, GstOggPad *, j);
+
+        ogg_stream_reset (&pad->stream);
+      }
+    }
+  }
+
   /* first find the chain to search in */
   for (i = ogg->chains->len - 1; i >= 0; i--) {
     chain = g_array_index (ogg->chains, GstOggChain *, i);
