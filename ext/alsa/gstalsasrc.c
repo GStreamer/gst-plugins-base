@@ -326,11 +326,6 @@ gst_alsa_src_loop (GstElement *element)
       gst_element_error (element, "Could not set caps");
       return;
     }
-    /* get the bufferpool going */
-    if (src->pool)
-      gst_buffer_pool_unref (src->pool);
-    src->pool = gst_buffer_pool_get_default (gst_alsa_samples_to_bytes (this, this->period_size), 
-                                             2 * element->numpads);
   }
 
   while ((avail = gst_alsa_update_avail (this)) < this->period_size) {
@@ -349,7 +344,7 @@ gst_alsa_src_loop (GstElement *element)
   /* make sure every pad has a buffer */
   for (i = 0; i < element->numpads; i++) {
     if (!src->buf[i]) {
-      src->buf[i] = gst_buffer_new_from_pool (src->pool, 0, 0);
+      src->buf[i] = gst_buffer_new_and_alloc (4096);
     }
   }
   /* fill buffer with data */
@@ -379,10 +374,6 @@ gst_alsa_src_flush (GstAlsaSrc *src)
       gst_buffer_unref (src->buf[i]);
       src->buf[i] = NULL;
     }
-  }
-  if (src->pool) {
-    gst_buffer_pool_unref (src->pool);
-    src->pool = NULL;
   }
 }
 static GstElementStateReturn
