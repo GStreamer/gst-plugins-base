@@ -256,7 +256,7 @@ gst_videotestsrc_change_state (GstElement * element)
     case GST_STATE_PLAYING_TO_PAUSED:
       v->pool = NULL;
       break;
-    case GST_STATE_READY_TO_NULL:
+    case GST_STATE_PAUSED_TO_READY:
       gst_videotestsrc_reset (v);
       break;
   }
@@ -329,18 +329,20 @@ gst_videotestsrc_init (GstVideotestsrc * videotestsrc)
 
   videotestsrc->pool = NULL;
   gst_videotestsrc_set_pattern(videotestsrc, GST_VIDEOTESTSRC_SMPTE);
+
+  videotestsrc->sync = TRUE;
+  videotestsrc->width = 640;
+  videotestsrc->height = 480;
+  videotestsrc->rate = 30;
+  videotestsrc->interval = GST_SECOND / videotestsrc->rate;
+
   gst_videotestsrc_reset (videotestsrc);
 }
 
 static void
 gst_videotestsrc_reset (GstVideotestsrc *videotestsrc)
 {
-  videotestsrc->sync = TRUE;
-  videotestsrc->width = 640;
-  videotestsrc->height = 480;
-  videotestsrc->rate = 30;
   videotestsrc->timestamp = 0;
-  videotestsrc->interval = GST_SECOND / videotestsrc->rate;
 }
 
 
