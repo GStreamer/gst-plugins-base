@@ -76,7 +76,7 @@ struct _GstXContext {
   
   gboolean use_xshm;
   
-  GstCaps *caps;
+  GstCaps2 *caps;
 };
 
 /* XWindow stuff */
@@ -107,7 +107,7 @@ struct _GstXImageSink {
   GstXWindow *xwindow;
   GstXImage *ximage;
   
-  gfloat framerate;
+  gdouble framerate;
   GMutex *x_lock;
   
   /* Unused */

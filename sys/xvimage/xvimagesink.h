@@ -85,7 +85,7 @@ struct _GstXContext {
   
   GList *formats_list;
   
-  GstCaps *caps;
+  GstCaps2 *caps;
 };
 
 /* XWindow stuff */
@@ -99,7 +99,7 @@ struct _GstXWindow {
 /* XvImage format stuff */
 struct _GstXvImageFormat {
   gint format;
-  GstCaps *caps;
+  GstCaps2 *caps;
 };
 
 /* XvImage stuff */
@@ -122,7 +122,7 @@ struct _GstXvImageSink {
   GstXWindow *xwindow;
   GstXvImage *xvimage;
   
-  gfloat framerate;
+  gdouble framerate;
   GMutex *x_lock;
   
   /* Unused */

@@ -38,15 +38,16 @@ static GstElementDetails gst_ximagesink_details = GST_ELEMENT_DETAILS (
 
 /* Default template - initiated with class struct to allow gst-register to work
    without X running */
-GST_PAD_TEMPLATE_FACTORY (gst_ximagesink_sink_template_factory,
+static GstStaticPadTemplate gst_ximagesink_sink_template_factory =
+GST_STATIC_PAD_TEMPLATE (
   "sink",
   GST_PAD_SINK,
   GST_PAD_ALWAYS,
-  GST_CAPS_NEW ("ximagesink_rgbsink", "video/x-raw-rgb",
-                "framerate", GST_PROPS_FLOAT_RANGE (0, G_MAXFLOAT),
-                "width", GST_PROPS_INT_RANGE (0, G_MAXINT),
-                "height", GST_PROPS_INT_RANGE (0, G_MAXINT))
-)
+  GST_STATIC_CAPS ("video/x-raw-rgb, "
+    "framerate = (double) [ 0, MAX ], "
+    "width = (int) [ 0, MAX ], "
+    "height = (int) [ 0, MAX ]")
+);
 
 static GstVideoSinkClass *parent_class = NULL;
 
@@ -302,16 +303,17 @@ gst_ximagesink_handle_xevents (GstXImageSink *ximagesink, GstPad *pad)
                 ximagesink->xwindow->height = e.xconfigure.height;
                 
                 r = gst_pad_try_set_caps (GST_VIDEOSINK_PAD (ximagesink),
-                                          GST_CAPS_NEW ("ximagesink_ximage_caps", "video/x-raw-rgb",
-                                                       "bpp",        GST_PROPS_INT (ximagesink->xcontext->bpp),
-                                                       "depth",      GST_PROPS_INT (ximagesink->xcontext->depth),
-                                                       "endianness", GST_PROPS_INT (G_BIG_ENDIAN),
-                                                       "red_mask",   GST_PROPS_INT (GINT_FROM_BE (ximagesink->xcontext->visual->red_mask)),
-                                                       "green_mask", GST_PROPS_INT (GINT_FROM_BE (ximagesink->xcontext->visual->green_mask)),
-                                                       "blue_mask",  GST_PROPS_INT (GINT_FROM_BE (ximagesink->xcontext->visual->blue_mask)),
-                                                       "width",      GST_PROPS_INT (e.xconfigure.width),
-                                                       "height",     GST_PROPS_INT (e.xconfigure.height),
-                                                       "framerate",  GST_PROPS_FLOAT (ximagesink->framerate)));
+		    gst_caps2_new_simple ("video/x-raw-rgb",
+		      "bpp",        G_TYPE_INT, ximagesink->xcontext->bpp,
+		      "depth",      G_TYPE_INT, ximagesink->xcontext->depth,
+		      "endianness", G_TYPE_INT, G_BIG_ENDIAN,
+		      "red_mask",   G_TYPE_INT, GINT_FROM_BE (ximagesink->xcontext->visual->red_mask),
+		      "green_mask", G_TYPE_INT, GINT_FROM_BE (ximagesink->xcontext->visual->green_mask),
+		      "blue_mask",  G_TYPE_INT, GINT_FROM_BE (ximagesink->xcontext->visual->blue_mask),
+		      "width",      G_TYPE_INT, e.xconfigure.width,
+		      "height",     G_TYPE_INT, e.xconfigure.height,
+		      "framerate",  G_TYPE_DOUBLE, ximagesink->framerate,
+		      NULL));
                 
                 if ( (r == GST_PAD_LINK_OK) || (r == GST_PAD_LINK_DONE) )
                   {
@@ -449,22 +451,19 @@ gst_ximagesink_xcontext_get (GstXImageSink *ximagesink)
     }
 #endif /* HAVE_XSHM */
   
-  xcontext->caps = GST_CAPS_NEW ("ximagesink_ximage_caps", "video/x-raw-rgb",
-      "bpp",        GST_PROPS_INT (xcontext->bpp),
-      "depth",      GST_PROPS_INT (xcontext->depth),
-      "endianness", GST_PROPS_INT (G_BIG_ENDIAN),
-      "red_mask",   GST_PROPS_INT (GINT_FROM_BE (xcontext->visual->red_mask)),
-      "green_mask", GST_PROPS_INT (GINT_FROM_BE (xcontext->visual->green_mask)),
-      "blue_mask",  GST_PROPS_INT (GINT_FROM_BE (xcontext->visual->blue_mask)),
-      "width",      GST_PROPS_INT_RANGE (0, G_MAXINT),
-      "height",     GST_PROPS_INT_RANGE (0, G_MAXINT),
-      "framerate",  GST_PROPS_FLOAT_RANGE (0, G_MAXFLOAT));
+  xcontext->caps = gst_caps2_new_simple ("video/x-raw-rgb",
+      "bpp",        G_TYPE_INT, xcontext->bpp,
+      "depth",      G_TYPE_INT, xcontext->depth,
+      "endianness", G_TYPE_INT, G_BIG_ENDIAN,
+      "red_mask",   G_TYPE_INT, GINT_FROM_BE (xcontext->visual->red_mask),
+      "green_mask", G_TYPE_INT, GINT_FROM_BE (xcontext->visual->green_mask),
+      "blue_mask",  G_TYPE_INT, GINT_FROM_BE (xcontext->visual->blue_mask),
+      "width",      GST_TYPE_INT_RANGE, 0, G_MAXINT,
+      "height",     GST_TYPE_INT_RANGE, 0, G_MAXINT,
+      "framerate",  GST_TYPE_DOUBLE_RANGE, 0, G_MAXDOUBLE,
+      NULL);
  
   g_mutex_unlock (ximagesink->x_lock);
-  
-  /* We make this caps non floating. This way we keep it during our whole life */
-  gst_caps_ref (xcontext->caps);
-  gst_caps_sink (xcontext->caps);
   
   return xcontext;
 }
@@ -477,7 +476,7 @@ gst_ximagesink_xcontext_clear (GstXImageSink *ximagesink)
   g_return_if_fail (ximagesink != NULL);
   g_return_if_fail (GST_IS_XIMAGESINK (ximagesink));
   
-  gst_caps_unref (ximagesink->xcontext->caps);
+  gst_caps2_free (ximagesink->xcontext->caps);
   
   g_mutex_lock (ximagesink->x_lock);
   
@@ -490,64 +489,59 @@ gst_ximagesink_xcontext_clear (GstXImageSink *ximagesink)
 
 /* Element stuff */
 
-static GstCaps *
-gst_ximagesink_getcaps (GstPad *pad, GstCaps *caps)
+static GstCaps2 *
+gst_ximagesink_getcaps (GstPad *pad)
 {
   GstXImageSink *ximagesink;
   
   ximagesink = GST_XIMAGESINK (gst_pad_get_parent (pad));
   
   if (ximagesink->xcontext)
-    return gst_caps_copy (ximagesink->xcontext->caps);
+    return gst_caps2_copy (ximagesink->xcontext->caps);
 
-  return GST_CAPS_NEW ("ximagesink_rgbsink", "video/x-raw-rgb",
-                       "framerate", GST_PROPS_FLOAT_RANGE (0, G_MAXFLOAT),
-                       "width", GST_PROPS_INT_RANGE (0, G_MAXINT),
-                       "height", GST_PROPS_INT_RANGE (0, G_MAXINT));
+  return gst_caps2_from_string ("video/x-raw-rgb, "
+      "framerate = (double) [ 0, MAX ], "
+      "width = (int) [ 0, MAX ], "
+      "height = (int) [ 0, MAX ]");
 }
 
 static GstPadLinkReturn
-gst_ximagesink_sinkconnect (GstPad *pad, GstCaps *caps)
+gst_ximagesink_sinkconnect (GstPad *pad, const GstCaps2 *caps)
 {
   GstXImageSink *ximagesink;
   char *caps_str1, *caps_str2;
+  gboolean ret;
+  GstStructure *structure;
 
   ximagesink = GST_XIMAGESINK (gst_pad_get_parent (pad));
 
-  /* we are not going to act on variable caps */
-  if (!GST_CAPS_IS_FIXED (caps))
-    return GST_PAD_LINK_DELAYED;
-  if (GST_CAPS_IS_CHAINED (caps))
-    return GST_PAD_LINK_DELAYED;
   if (!ximagesink->xcontext)
     return GST_PAD_LINK_DELAYED;
   
-  caps_str1 = gst_caps_to_string (ximagesink->xcontext->caps);
-  caps_str2 = gst_caps_to_string (caps);
+  caps_str1 = gst_caps2_to_string (ximagesink->xcontext->caps);
+  caps_str2 = gst_caps2_to_string (caps);
 
   GST_DEBUG ("sinkconnect %s with %s", caps_str1, caps_str2);
 
-  if (caps_str1)
-    g_free (caps_str1);
-  if (caps_str2)
-    g_free (caps_str2);
+  g_free (caps_str1);
+  g_free (caps_str2);
 
-  if (!gst_caps_get_int (caps, "width", &(GST_VIDEOSINK_WIDTH (ximagesink))))
-    return GST_PAD_LINK_REFUSED;
-  if (!gst_caps_get_int (caps, "height", &(GST_VIDEOSINK_HEIGHT (ximagesink))))
-    return GST_PAD_LINK_REFUSED;
-  if (!gst_caps_get_float (caps, "framerate", &ximagesink->framerate))
-    return GST_PAD_LINK_REFUSED;
+  structure = gst_caps2_get_nth_cap (caps, 0);
+  ret = gst_structure_get_int (structure, "width",
+      &(GST_VIDEOSINK_WIDTH (ximagesink)));
+  ret &= gst_structure_get_int (structure, "height",
+      &(GST_VIDEOSINK_HEIGHT (ximagesink)));
+  ret &= gst_structure_get_double (structure,
+      "framerate", &ximagesink->framerate);
+  if (!ret) return GST_PAD_LINK_REFUSED;
   
-  if (gst_caps_has_fixed_property (caps, "pixel_width"))
-    gst_caps_get_int (caps, "pixel_width", &ximagesink->pixel_width);
-  else
-    ximagesink->pixel_width = 1;
+  ximagesink->pixel_width = 1;
+  gst_structure_get_int  (structure, "pixel_width",
+      &ximagesink->pixel_width);
 
-  if (gst_caps_has_fixed_property (caps, "pixel_height"))
-    gst_caps_get_int (caps, "pixel_height", &ximagesink->pixel_height);
-  else
-    ximagesink->pixel_height = 1;
+  ximagesink->pixel_height = 1;
+  gst_structure_get_int  (structure, "pixel_height",
+      &ximagesink->pixel_height);
   
   /* Creating our window and our image */
   if (!ximagesink->xwindow)
@@ -949,9 +943,8 @@ static void
 gst_ximagesink_init (GstXImageSink *ximagesink)
 {
   GST_VIDEOSINK_PAD (ximagesink) = gst_pad_new_from_template (
-                                     GST_PAD_TEMPLATE_GET (
-                                       gst_ximagesink_sink_template_factory),
-                                       "sink");
+      gst_static_pad_template_get (&gst_ximagesink_sink_template_factory),
+      "sink");
   
   gst_element_add_pad (GST_ELEMENT (ximagesink),
                        GST_VIDEOSINK_PAD (ximagesink));
@@ -990,7 +983,7 @@ gst_ximagesink_base_init (gpointer g_class)
   gst_element_class_set_details (element_class, &gst_ximagesink_details);
 
   gst_element_class_add_pad_template (element_class, 
-    GST_PAD_TEMPLATE_GET (gst_ximagesink_sink_template_factory));
+    gst_static_pad_template_get (&gst_ximagesink_sink_template_factory));
 }
 
 static void
