@@ -594,6 +594,12 @@ gst_ogg_pad_submit_packet (GstOggPad * pad, ogg_packet * packet)
     }
   } else {
     /* initialize our internal decoder with packets */
+    if (!pad->elem_pad) {
+      GST_WARNING_OBJECT (ogg,
+          "pad %08lx does not have elem_pad, no decoder ?", pad);
+      return GST_FLOW_OK;
+    }
+
     GST_DEBUG_OBJECT (ogg,
         "%p init decoder serial %08lx, packetno %lld", pad, pad->serialno,
         pad->packetno);
