@@ -27,9 +27,7 @@
 
 #include <gst/gst.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif /* __cplusplus */
+G_BEGIN_DECLS
 
 
 GstElementDetails gst_sinesrc_details;
@@ -70,17 +68,16 @@ struct _GstSineSrc {
   gint table_lookup_next;
     
   /* audio parameters */
-  gint rate;
+  gint samplerate;
 
   gint samples_per_buffer;
   gulong seq;
   
-  gint64 timestamp;
+  guint64 timestamp;
+  guint64 offset;
   GstBufferPool *bufpool;
 
-  gboolean newcaps;
-
-  double accumulator;
+  gdouble accumulator;
 };
 
 struct _GstSineSrcClass {
@@ -90,9 +87,7 @@ struct _GstSineSrcClass {
 GType gst_sinesrc_get_type(void);
 gboolean gst_sinesrc_factory_init (GstElementFactory *factory);
 
-#ifdef __cplusplus
-}
-#endif /* __cplusplus */
+G_END_DECLS
 
 
 #endif /* __GST_SINESRC_H__ */

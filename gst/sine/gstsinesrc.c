@@ -80,20 +80,26 @@ static void         gst_sinesrc_get_property        (GObject *object,
 		                                     guint prop_id, 
 					             GValue *value, 
 					             GParamSpec *pspec);
-/*static gboolean gst_sinesrc_change_state(GstElement *element, */
-/*                                          GstElementState state); */
-/*static void gst_sinesrc_close_audio(GstSineSrc *src); */
-/*static gboolean gst_sinesrc_open_audio(GstSineSrc *src); */
+static GstPadLinkReturn
+                    gst_sinesrc_link                (GstPad  *pad,
+						     const GstCaps2 *caps);
+static GstElementStateReturn
+                    gst_sinesrc_change_state        (GstElement *element);
 
 static void 	    gst_sinesrc_update_freq         (const GValue *value, 
 		                                     gpointer data);
 static void 	    gst_sinesrc_populate_sinetable  (GstSineSrc *src);
 static inline void  gst_sinesrc_update_table_inc    (GstSineSrc *src);
-static gboolean     gst_sinesrc_force_caps	    (GstSineSrc *src);
+
+static const GstQueryType *
+		    gst_sinesrc_get_query_types     (GstPad      *pad);
+static gboolean     gst_sinesrc_src_query           (GstPad      *pad,
+						     GstQueryType type,
+						     GstFormat   *format,
+						     gint64      *value);
 
 static GstData*   gst_sinesrc_get		    (GstPad *pad);
 static GstCaps2 * gst_sinesrc_src_fixate (GstPad *pad, const GstCaps2 *caps, gpointer user_data);
-static GstPadLinkReturn gst_sinesrc_src_link (GstPad *pad, const GstCaps2 *caps);
 
 static GstElementClass *parent_class = NULL;
 /*static guint gst_sinesrc_signals[LAST_SIGNAL] = { 0 }; */
@@ -156,7 +162,7 @@ gst_sinesrc_class_init (GstSineSrcClass *klass)
   gobject_class->set_property = gst_sinesrc_set_property;
   gobject_class->get_property = gst_sinesrc_get_property;
 
-/*  gstelement_class->change_state = gst_sinesrc_change_state; */
+  gstelement_class->change_state = gst_sinesrc_change_state;
 }
 
 static void 
@@ -164,22 +170,24 @@ gst_sinesrc_init (GstSineSrc *src)
 {
   src->srcpad = gst_pad_new_from_template (
       gst_static_pad_template_get (&gst_sinesrc_src_template), "src");
-  gst_pad_set_link_function (src->srcpad, gst_sinesrc_src_link);
+  gst_pad_set_link_function (src->srcpad, gst_sinesrc_link);
   gst_pad_set_fixate_function (src->srcpad, gst_sinesrc_src_fixate);
   gst_element_add_pad (GST_ELEMENT(src), src->srcpad);
   
   gst_pad_set_get_function (src->srcpad, gst_sinesrc_get);
+  gst_pad_set_link_function (src->srcpad, gst_sinesrc_link);
+  gst_pad_set_query_function (src->srcpad, gst_sinesrc_src_query);
+  gst_pad_set_query_type_function (src->srcpad, gst_sinesrc_get_query_types);
 
-  src->rate = 44100;
+  src->samplerate = 44100;
   src->volume = 1.0;
   src->freq = 440.0;
-  
-  src->newcaps = TRUE;
   
   src->table_pos = 0.0;
   src->table_size = 1024;
   src->samples_per_buffer=1024;
-  src->timestamp=0LL;
+  src->timestamp=0LLU;
+  src->offset=0LLU;
   src->bufpool=NULL;
   
   src->seq = 0;
@@ -203,7 +211,7 @@ gst_sinesrc_init (GstSineSrc *src)
     &(src->volume)
   );
   
-  gst_dpman_set_rate(src->dpman, src->rate);
+  gst_dpman_set_rate(src->dpman, src->samplerate);
 
   gst_sinesrc_populate_sinetable(src);
   gst_sinesrc_update_table_inc(src);
@@ -229,7 +237,7 @@ gst_sinesrc_src_fixate (GstPad *pad, const GstCaps2 *caps,
 }
 
 static GstPadLinkReturn
-gst_sinesrc_src_link (GstPad *pad, const GstCaps2 *caps)
+gst_sinesrc_link (GstPad *pad, const GstCaps2 *caps)
 {
   GstSineSrc *sinesrc;
   const GstStructure *structure;
@@ -240,11 +248,59 @@ gst_sinesrc_src_link (GstPad *pad, const GstCaps2 *caps)
 
   structure = gst_caps2_get_nth_cap (caps, 0);
 
-  ret = gst_structure_get_int (structure, "rate", &sinesrc->rate);
+  ret = gst_structure_get_int (structure, "rate", &sinesrc->samplerate);
 
   if (!ret) return GST_PAD_LINK_REFUSED;
 
   return GST_PAD_LINK_OK;
+}
+
+static const GstQueryType *
+gst_sinesrc_get_query_types (GstPad *pad)
+{
+  static const GstQueryType query_types[] = {
+    GST_QUERY_POSITION,
+    0,
+  };
+
+  return query_types;
+} 
+
+static gboolean
+gst_sinesrc_src_query (GstPad      *pad,
+		       GstQueryType type,
+		       GstFormat   *format,
+		       gint64      *value)
+{
+  gboolean res = FALSE;
+  GstSineSrc *src;
+	      
+  src = GST_SINESRC (gst_pad_get_parent (pad));
+	        
+  switch (type) {
+    case GST_QUERY_POSITION:
+      switch (*format) {
+        case GST_FORMAT_TIME:
+          *value = src->timestamp;
+          res = TRUE;
+          break;
+        case GST_FORMAT_DEFAULT: /* samples */
+          *value = src->offset / 2; /* 16bpp audio */
+          res = TRUE;
+          break;
+        case GST_FORMAT_BYTES:
+          *value = src->offset;
+          res = TRUE;
+          break;
+        default:
+          break;
+      }
+      break;
+    default:
+      break;
+  }
+
+  return res;
 }
 
 static GstData *
@@ -252,26 +308,31 @@ gst_sinesrc_get (GstPad *pad)
 {
   GstSineSrc *src;
   GstBuffer *buf;
+  guint tdiff;
   
   gint16 *samples;
   gint i=0;
   
   g_return_val_if_fail (pad != NULL, NULL);
-  src = GST_SINESRC(gst_pad_get_parent (pad));
+  src = GST_SINESRC (gst_pad_get_parent (pad));
 
   if (src->bufpool == NULL) {
     src->bufpool = gst_buffer_pool_get_default (2 * src->samples_per_buffer, 8);
   }
-  
+
+  tdiff = src->samples_per_buffer * GST_SECOND / src->samplerate;
+
   buf = (GstBuffer *) gst_buffer_new_from_pool (src->bufpool, 0, 0);
   GST_BUFFER_TIMESTAMP(buf) = src->timestamp;
+  GST_BUFFER_OFFSET (buf) = src->offset;
+  GST_BUFFER_DURATION (buf) = tdiff;
 
-  samples = (gint16*)GST_BUFFER_DATA(buf);
-  GST_BUFFER_DATA(buf) = (gpointer) samples;
+  samples = (gint16 *) GST_BUFFER_DATA(buf);
 
   GST_DPMAN_PREPROCESS(src->dpman, src->samples_per_buffer, src->timestamp);
   
-  src->timestamp += (gint64)src->samples_per_buffer * GST_SECOND / (gint64)src->rate;
+  src->timestamp += tdiff;
+  src->offset += GST_BUFFER_SIZE (buf);
    
   while(GST_DPMAN_PROCESS(src->dpman, i)) {
 #if 0
@@ -302,7 +363,7 @@ gst_sinesrc_get (GstPad *pad)
                   )+src->table_data[src->table_lookup]
                  )* src->volume * 32767.0;
 #endif
-    src->accumulator += 2*M_PI*src->freq / src->rate;
+    src->accumulator += 2*M_PI*src->freq / src->samplerate;
     if(src->accumulator >= 2*M_PI){
       src->accumulator -= 2*M_PI;
     }
@@ -311,13 +372,14 @@ gst_sinesrc_get (GstPad *pad)
     i++;
   }
 
-  
-  if (src->newcaps) {
-    if (!gst_sinesrc_force_caps(src)) {
+  if (!GST_PAD_CAPS (src->srcpad)) {
+    if (gst_sinesrc_link (src->srcpad,
+			  gst_pad_get_allowed_caps (src->srcpad)) <= 0) {
       gst_element_error (GST_ELEMENT (src), "Could not set caps");
       return NULL;
     }
   }
+
   return GST_DATA (buf);
 }
 
@@ -381,28 +443,25 @@ gst_sinesrc_get_property (GObject *object, guint prop_id,
   }
 }
 
-/*
-static gboolean gst_sinesrc_change_state(GstElement *element,
-                                          GstElementState state) {
-  g_return_if_fail(GST_IS_SINESRC(element));
+static GstElementStateReturn
+gst_sinesrc_change_state (GstElement *element)
+{
+  GstSineSrc *src = GST_SINESRC (element);
 
-  switch (state) {
-    case GST_STATE_RUNNING:
-      if (!gst_sinesrc_open_audio(GST_SINESRC(element)))
-        return FALSE;
-      break;
-    case ~GST_STATE_RUNNING:
-      gst_sinesrc_close_audio(GST_SINESRC(element));
+  switch (GST_STATE_TRANSITION (element)) {
+    case GST_STATE_PAUSED_TO_READY:
+      src->timestamp = 0LLU;
+      src->offset = 0LLU;
       break;
     default:
       break;
   }
 
   if (GST_ELEMENT_CLASS(parent_class)->change_state)
-    return GST_ELEMENT_CLASS(parent_class)->change_state(element,state);
-  return TRUE;
+    return GST_ELEMENT_CLASS(parent_class)->change_state (element);
+
+  return GST_STATE_SUCCESS;
 }
-*/
 
 static void 
 gst_sinesrc_populate_sinetable (GstSineSrc *src)
@@ -426,7 +485,7 @@ gst_sinesrc_update_freq (const GValue *value, gpointer data)
   g_return_if_fail (GST_IS_SINESRC (src));
 
   src->freq = g_value_get_double (value);
-  src->table_inc = src->table_size * src->freq / src->rate;
+  src->table_inc = src->table_size * src->freq / src->samplerate;
   
   /*GST_DEBUG ("freq %f", src->freq); */
 }
@@ -434,9 +493,10 @@ gst_sinesrc_update_freq (const GValue *value, gpointer data)
 static inline void 
 gst_sinesrc_update_table_inc (GstSineSrc *src)
 {
-  src->table_inc = src->table_size * src->freq / src->rate;
+  src->table_inc = src->table_size * src->freq / src->samplerate;
 }
 
+#if 0
 static gboolean 
 gst_sinesrc_force_caps (GstSineSrc *src)
 {
@@ -458,12 +518,13 @@ gst_sinesrc_force_caps (GstSineSrc *src)
 
   structure = gst_caps2_get_nth_cap (caps, 0);
 
-  gst_structure_set (structure, "rate", G_TYPE_INT, src->rate, NULL);
+  gst_structure_set (structure, "rate", G_TYPE_INT, src->samplerate, NULL);
   
   src->newcaps = gst_pad_try_set_caps (src->srcpad, caps) < GST_PAD_LINK_OK;
 
   return !src->newcaps;
 }
+#endif
 
 static gboolean
 plugin_init (GstPlugin *plugin)
@@ -483,7 +544,6 @@ GST_PLUGIN_DEFINE (
   plugin_init,
   VERSION,
   "LGPL",
-  GST_COPYRIGHT,
   GST_PACKAGE,
   GST_ORIGIN
 )

@@ -236,24 +236,24 @@ gst_adder_link (GstPad *pad, const GstCaps2 *caps)
 	  remove = g_list_prepend (remove, p);
 	}
       }
-      sinkpads = g_list_next (sinkpads);
-    }
-    while (remove) {
-      gst_element_remove_pad (GST_ELEMENT (adder),
-			      GST_PAD_CAST (remove->data));
-    restart:
-      channels = adder->input_channels;
-      while (channels) {
-	GstAdderInputChannel *channel;
-	channel = (GstAdderInputChannel*) channels->data;
-	if (channel->sinkpad == GST_PAD_CAST (remove->data)) {
-	  gst_bytestream_destroy (channel->bytestream);
-	  adder->input_channels =
-	    g_slist_remove_link (adder->input_channels, channels);
-	  adder->numsinkpads--;
-	  goto restart;
-	}
-	channels = g_slist_next (channels);
+      while (remove) {
+        gst_element_remove_pad (GST_ELEMENT (adder),
+                                GST_PAD (remove->data));
+      restart:
+        channels = adder->input_channels;
+        while (channels) {
+          GstAdderInputChannel *channel;
+	  channel = (GstAdderInputChannel*) channels->data;
+          if (channel->sinkpad == GST_PAD (remove->data)) {
+            gst_bytestream_destroy (channel->bytestream);
+            adder->input_channels =
+              g_slist_remove_link (adder->input_channels, channels);
+            adder->numsinkpads--;
+            goto restart;
+          }
+          channels = g_slist_next (channels);
+        }
+        remove = g_list_next (remove);
       }
       remove = g_list_next (remove);
     }
@@ -617,7 +617,6 @@ GST_PLUGIN_DEFINE(
   plugin_init,
   VERSION,
   "LGPL",
-  GST_COPYRIGHT,
   GST_PACKAGE,
   GST_ORIGIN
 )

@@ -306,10 +306,10 @@ gst_ximagesink_handle_xevents (GstXImageSink *ximagesink, GstPad *pad)
 		    gst_caps2_new_simple ("video/x-raw-rgb",
 		      "bpp",        G_TYPE_INT, ximagesink->xcontext->bpp,
 		      "depth",      G_TYPE_INT, ximagesink->xcontext->depth,
-		      "endianness", G_TYPE_INT, G_BIG_ENDIAN,
-		      "red_mask",   G_TYPE_INT, GINT_FROM_BE (ximagesink->xcontext->visual->red_mask),
-		      "green_mask", G_TYPE_INT, GINT_FROM_BE (ximagesink->xcontext->visual->green_mask),
-		      "blue_mask",  G_TYPE_INT, GINT_FROM_BE (ximagesink->xcontext->visual->blue_mask),
+		      "endianness", G_TYPE_INT, ximagesink->xcontext->endianness,
+		      "red_mask",   G_TYPE_INT, ximagesink->xcontext->visual->red_mask,
+		      "green_mask", G_TYPE_INT, ximagesink->xcontext->visual->green_mask,
+		      "blue_mask",  G_TYPE_INT, ximagesink->xcontext->visual->blue_mask,
 		      "width",      G_TYPE_INT, e.xconfigure.width,
 		      "height",     G_TYPE_INT, e.xconfigure.height,
 		      "framerate",  G_TYPE_DOUBLE, ximagesink->framerate,
@@ -367,7 +367,7 @@ gst_ximagesink_handle_xevents (GstXImageSink *ximagesink, GstPad *pad)
                                        e.xkey.keycode, 0);
             gst_navigation_send_key_event (GST_NAVIGATION (ximagesink),
                                            XKeysymToString (keysym));
-            /* What's that ? */
+            /* FIXME : What's that ? */
             gst_navigation_send_key_event (GST_NAVIGATION (ximagesink),
                                            "unknown");
             break;
@@ -435,7 +435,7 @@ gst_ximagesink_xcontext_get (GstXImageSink *ximagesink)
     
   XFree (px_formats);
     
-  xcontext->endianness = (ImageByteOrder (xcontext->disp) == LSBFirst) ? G_BIG_ENDIAN:G_BIG_ENDIAN;
+  xcontext->endianness = (ImageByteOrder (xcontext->disp) == LSBFirst) ? G_LITTLE_ENDIAN:G_BIG_ENDIAN;
   
 #ifdef HAVE_XSHM
   /* Search for XShm extension support */
@@ -450,14 +450,23 @@ gst_ximagesink_xcontext_get (GstXImageSink *ximagesink)
       GST_DEBUG ("ximagesink is not using XShm extension");
     }
 #endif /* HAVE_XSHM */
+
+  /* our caps system handles 24/32bpp RGB as big-endian. */
+  if ((xcontext->bpp == 24 || xcontext->bpp == 32) &&
+      xcontext->endianness == G_LITTLE_ENDIAN) {
+    xcontext->endianness = G_BIG_ENDIAN;
+    xcontext->visual->red_mask = GULONG_TO_BE (xcontext->visual->red_mask);
+    xcontext->visual->green_mask = GULONG_TO_BE (xcontext->visual->green_mask);
+    xcontext->visual->blue_mask = GULONG_TO_BE (xcontext->visual->blue_mask);
+  }
   
   xcontext->caps = gst_caps2_new_simple ("video/x-raw-rgb",
       "bpp",        G_TYPE_INT, xcontext->bpp,
       "depth",      G_TYPE_INT, xcontext->depth,
-      "endianness", G_TYPE_INT, G_BIG_ENDIAN,
-      "red_mask",   G_TYPE_INT, GINT_FROM_BE (xcontext->visual->red_mask),
-      "green_mask", G_TYPE_INT, GINT_FROM_BE (xcontext->visual->green_mask),
-      "blue_mask",  G_TYPE_INT, GINT_FROM_BE (xcontext->visual->blue_mask),
+      "endianness", G_TYPE_INT, xcontext->endianness,
+      "red_mask",   G_TYPE_INT, xcontext->visual->red_mask,
+      "green_mask", G_TYPE_INT, xcontext->visual->green_mask,
+      "blue_mask",  G_TYPE_INT, xcontext->visual->blue_mask,
       "width",      GST_TYPE_INT_RANGE, 0, G_MAXINT,
       "height",     GST_TYPE_INT_RANGE, 0, G_MAXINT,
       "framerate",  GST_TYPE_DOUBLE_RANGE, 0.0, G_MAXDOUBLE,
@@ -796,14 +805,14 @@ gst_ximagesink_get_bufferpool (GstPad *pad)
 /* Interfaces stuff */
 
 static gboolean
-gst_ximagesink_interface_supported (GstInterface *iface, GType type)
+gst_ximagesink_interface_supported (GstImplementsInterface *iface, GType type)
 {
   g_assert (type == GST_TYPE_NAVIGATION || type == GST_TYPE_X_OVERLAY);
   return TRUE;
 }
 
 static void
-gst_ximagesink_interface_init (GstInterfaceClass *klass)
+gst_ximagesink_interface_init (GstImplementsInterfaceClass *klass)
 {
   klass->supported = gst_ximagesink_interface_supported;
 }
@@ -1052,7 +1061,7 @@ gst_ximagesink_get_type (void)
                                                 "GstXImageSink",
                                                 &ximagesink_info, 0);
       
-      g_type_add_interface_static (ximagesink_type, GST_TYPE_INTERFACE,
+      g_type_add_interface_static (ximagesink_type, GST_TYPE_IMPLEMENTS_INTERFACE,
                                    &iface_info);
       g_type_add_interface_static (ximagesink_type, GST_TYPE_NAVIGATION,
                                    &navigation_info);
@@ -1085,6 +1094,5 @@ GST_PLUGIN_DEFINE (
   plugin_init,
   VERSION,
   GST_LICENSE,
-  GST_COPYRIGHT,
   GST_PACKAGE,
   GST_ORIGIN)

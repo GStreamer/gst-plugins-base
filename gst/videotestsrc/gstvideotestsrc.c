@@ -71,6 +71,13 @@ static void gst_videotestsrc_get_property (GObject * object, guint prop_id, GVal
 
 static GstData *gst_videotestsrc_get (GstPad * pad);
 
+static const GstQueryType *
+		gst_videotestsrc_get_query_types (GstPad      *pad);
+static gboolean gst_videotestsrc_src_query (GstPad      *pad,
+					    GstQueryType type,
+					    GstFormat   *format,
+					    gint64      *value);
+
 static GstElementClass *parent_class = NULL;
 
 static GstCaps2 * gst_videotestsrc_get_capslist (void);
@@ -356,6 +363,9 @@ gst_videotestsrc_init (GstVideotestsrc * videotestsrc)
   gst_pad_set_get_function (videotestsrc->srcpad, gst_videotestsrc_get);
   gst_pad_set_link_function (videotestsrc->srcpad, gst_videotestsrc_src_link);
   gst_pad_set_unlink_function (videotestsrc->srcpad, gst_videotestsrc_src_unlink);
+  gst_pad_set_query_function (videotestsrc->srcpad, gst_videotestsrc_src_query);
+  gst_pad_set_query_type_function (videotestsrc->srcpad,
+				   gst_videotestsrc_get_query_types);
 
   videotestsrc->pool = NULL;
   gst_videotestsrc_set_pattern(videotestsrc, GST_VIDEOTESTSRC_SMPTE);
@@ -364,6 +374,49 @@ gst_videotestsrc_init (GstVideotestsrc * videotestsrc)
   videotestsrc->default_width = 320;
   videotestsrc->default_height = 240;
   videotestsrc->default_rate = 30.;
+}
+
+
+static const GstQueryType *
+gst_videotestsrc_get_query_types (GstPad *pad)
+{
+  static const GstQueryType query_types[] = {
+    GST_QUERY_POSITION,
+    0,
+  };
+
+  return query_types;
+} 
+
+static gboolean
+gst_videotestsrc_src_query (GstPad      *pad,
+			    GstQueryType type,
+			    GstFormat   *format,
+			    gint64      *value)
+{
+  gboolean res = FALSE;
+  GstVideotestsrc *videotestsrc = GST_VIDEOTESTSRC (gst_pad_get_parent (pad));
+	        
+  switch (type) {
+    case GST_QUERY_POSITION:
+      switch (*format) {
+        case GST_FORMAT_TIME:
+          *value = videotestsrc->n_frames * GST_SECOND / (double) videotestsrc->rate;
+          res = TRUE;
+          break;
+        case GST_FORMAT_DEFAULT: /* frames */
+          *value = videotestsrc->n_frames;
+          res = TRUE;
+          break;
+        default:
+          break;
+      }
+      break;
+    default:
+      break;
+  }
+
+  return res;
 }
 
 
@@ -382,7 +435,11 @@ gst_videotestsrc_get (GstPad * pad)
 
   videotestsrc = GST_VIDEOTESTSRC (gst_pad_get_parent (pad));
 
-  g_return_val_if_fail (videotestsrc->fourcc != NULL, NULL);
+  if (videotestsrc->fourcc != NULL) {
+    gst_element_error (GST_ELEMENT (videotestsrc),
+		       "No color format set - aborting");
+    return NULL;
+  }
 
   newsize = (videotestsrc->width * videotestsrc->height * videotestsrc->bpp) >> 3;
   g_return_val_if_fail (newsize > 0, NULL);
@@ -427,6 +484,7 @@ gst_videotestsrc_get (GstPad * pad)
       (videotestsrc->n_frames * GST_SECOND)/(double)videotestsrc->rate;
     videotestsrc->n_frames++;
   }
+  GST_BUFFER_DURATION (buf) = GST_SECOND / (double) videotestsrc->rate;
 
   return GST_DATA (buf);
 }
@@ -543,10 +601,6 @@ GST_PLUGIN_DEFINE (
   plugin_init,
   VERSION,
   GST_LICENSE,
-  GST_COPYRIGHT,
   GST_PACKAGE,
   GST_ORIGIN
 )
-
-
-

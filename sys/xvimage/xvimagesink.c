@@ -464,6 +464,7 @@ gst_xvimagesink_get_xv_support (GstXContext *xcontext)
         XFree (formats);
       
       GST_DEBUG_CAPS ("Generated the following caps", caps);
+
       return caps;
     }
     
@@ -732,12 +733,14 @@ gst_xvimagesink_change_state (GstElement *element)
         return GST_STATE_FAILURE;
       break;
     case GST_STATE_READY_TO_PAUSED:
+      xvimagesink->time = 0;
       break;
     case GST_STATE_PAUSED_TO_PLAYING:
       break;
     case GST_STATE_PLAYING_TO_PAUSED:
       break;
     case GST_STATE_PAUSED_TO_READY:
+      xvimagesink->framerate = 0;
       break;
     case GST_STATE_READY_TO_NULL:
       break;
@@ -745,26 +748,25 @@ gst_xvimagesink_change_state (GstElement *element)
 
   if (GST_ELEMENT_CLASS (parent_class)->change_state)
     return GST_ELEMENT_CLASS (parent_class)->change_state (element);
-  
+
   return GST_STATE_SUCCESS;
 }
 
 static void
-gst_xvimagesink_chain (GstPad *pad, GstData *_data)
+gst_xvimagesink_chain (GstPad *pad, GstData *data)
 {
-  GstBuffer *buf = GST_BUFFER (_data);
-  GstClockTime time = GST_BUFFER_TIMESTAMP (buf);
+  GstBuffer *buf = NULL;
   GstXvImageSink *xvimagesink;
-  
+
   g_return_if_fail (pad != NULL);
   g_return_if_fail (GST_IS_PAD (pad));
-  g_return_if_fail (buf != NULL);
+  g_return_if_fail (data != NULL);
 
   xvimagesink = GST_XVIMAGESINK (gst_pad_get_parent (pad));
     
-  if (GST_IS_EVENT (buf))
+  if (GST_IS_EVENT (data))
     {
-      GstEvent *event = GST_EVENT (buf);
+      GstEvent *event = GST_EVENT (data);
       gint64 offset;
 
       switch (GST_EVENT_TYPE (event))
@@ -781,11 +783,16 @@ gst_xvimagesink_chain (GstPad *pad, GstData *_data)
       return;
     }
   
-  GST_DEBUG ("videosink: clock wait: %" G_GUINT64_FORMAT, time);
+  buf = GST_BUFFER (data);
+  /* update time */
+  if (GST_BUFFER_TIMESTAMP_IS_VALID (buf)) {
+    xvimagesink->time = GST_BUFFER_TIMESTAMP (buf);
+  }
+  GST_DEBUG ("videosink: clock wait: %" G_GUINT64_FORMAT, xvimagesink->time);
   
   if (GST_VIDEOSINK_CLOCK (xvimagesink)) {
     GstClockID id;
-    id = gst_clock_new_single_shot_id (GST_VIDEOSINK_CLOCK (xvimagesink), time);
+    id = gst_clock_new_single_shot_id (GST_VIDEOSINK_CLOCK (xvimagesink), xvimagesink->time);
     gst_element_clock_wait (GST_ELEMENT (xvimagesink), id, NULL);
     gst_clock_id_free (id);
   }
@@ -810,7 +817,11 @@ gst_xvimagesink_chain (GstPad *pad, GstData *_data)
           return;
         }
     }
-  
+  /* set correct time for next buffer */
+  if (!GST_BUFFER_TIMESTAMP_IS_VALID (buf) && xvimagesink->framerate > 0) {
+    xvimagesink->time += GST_SECOND / xvimagesink->framerate;
+  }
+
   gst_buffer_unref (buf);
     
   gst_xvimagesink_handle_xevents (xvimagesink, pad);
@@ -942,14 +953,14 @@ gst_xvimagesink_get_bufferpool (GstPad *pad)
 /* Interfaces stuff */
 
 static gboolean
-gst_xvimagesink_interface_supported (GstInterface *iface, GType type)
+gst_xvimagesink_interface_supported (GstImplementsInterface *iface, GType type)
 {
   g_assert (type == GST_TYPE_NAVIGATION || type == GST_TYPE_X_OVERLAY);
   return TRUE;
 }
 
 static void
-gst_xvimagesink_interface_init (GstInterfaceClass *klass)
+gst_xvimagesink_interface_init (GstImplementsInterfaceClass *klass)
 {
   klass->supported = gst_xvimagesink_interface_supported;
 }
@@ -1191,7 +1202,7 @@ gst_xvimagesink_get_type (void)
                                                  "GstXvImageSink",
                                                  &xvimagesink_info, 0);
       
-      g_type_add_interface_static (xvimagesink_type, GST_TYPE_INTERFACE,
+      g_type_add_interface_static (xvimagesink_type, GST_TYPE_IMPLEMENTS_INTERFACE,
                                    &iface_info);
       g_type_add_interface_static (xvimagesink_type, GST_TYPE_NAVIGATION,
                                    &navigation_info);
@@ -1224,6 +1235,5 @@ GST_PLUGIN_DEFINE (
   plugin_init,
   VERSION,
   GST_LICENSE,
-  GST_COPYRIGHT,
   GST_PACKAGE,
   GST_ORIGIN)
