@@ -26,10 +26,14 @@
 #include <gst/gsttypefind.h>
 #include <gst/gstelement.h>
 #include <gst/gstversion.h>
+#include <gst/gstinfo.h>
 
 #include <string.h>
 #include <ctype.h>
       
+GST_DEBUG_CATEGORY_STATIC (type_find_debug);
+#define GST_CAT_DEFAULT type_find_debug
+
 /*** video/x-ms-asf ***********************************************************/
 
 #define ASF_CAPS gst_caps_new ("asf_type_find", "video/x-ms-asf", NULL)
@@ -206,9 +210,9 @@ static guint mp3types_bitrates[2][3][16] =
 };
 
 static guint mp3types_freqs[3][3] =
-{ {44100, 48000, 32000},
+{ {11025, 12000,  8000},
   {22050, 24000, 16000}, 
-  {11025, 12000,  8000}};
+  {44100, 48000, 32000}};
 
 static inline guint
 mp3_type_frame_length_from_header (guint32 header, guint *put_layer,
@@ -253,7 +257,7 @@ mp3_type_frame_length_from_header (guint32 header, guint *put_layer,
     return 0;
   header >>= 2;
 
-  /* version */
+  /* version 0=MPEG2.5; 2=MPEG2; 3=MPEG1 */
   version = header & 0x3;
   if (version == 1)
     return 0;
@@ -267,14 +271,14 @@ mp3_type_frame_length_from_header (guint32 header, guint *put_layer,
   if (layer == 1) {
     length = ((12000 * bitrate / samplerate) + length) * 4;
   } else {
-    length += ((layer == 3 && version == 0) ? 144000 : 72000) * bitrate / samplerate;
+    length += ((layer == 3 && version == 0) ? 72000 : 144000) * bitrate / samplerate;
   }
-#if 0
+  
   GST_LOG ("mp3typefind: alculated mp3 frame length of %u bytes", length);
   GST_LOG ("mp3typefind: samplerate = %lu - bitrate = %lu - layer = %lu - version = %lu"
 	     " - channels = %lu",
 	     samplerate, bitrate, layer, version, channels);
-#endif
+  
   if (put_layer)
     *put_layer = layer;
   if (put_channels)
@@ -674,6 +678,8 @@ plugin_init (GModule *module, GstPlugin *plugin)
   static gchar * wav_exts[] = {"wav", NULL};
   static gchar * aiff_exts[] = {"aiff", "aif", "aifc", NULL};
   static gchar * shn_exts[] = {"shn", NULL};
+
+  GST_DEBUG_CATEGORY_INIT (type_find_debug, "typefindfunctions", GST_DEBUG_FG_GREEN | GST_DEBUG_BG_RED, "generic type find functions");
 
   gst_type_find_factory_register (plugin, "video/x-ms-asf", GST_ELEMENT_RANK_SECONDARY,
 	  asf_type_find, asf_exts, ASF_CAPS, NULL);
