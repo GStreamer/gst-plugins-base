@@ -170,10 +170,10 @@ GST_STATIC_PAD_TEMPLATE ("src",
 
 GST_BOILERPLATE (GstTheoraEnc, gst_theora_enc, GstElement, GST_TYPE_ELEMENT);
 
-static void theora_enc_chain (GstPad * pad, GstData * data);
+static gboolean theora_enc_sink_event (GstPad * pad, GstEvent * event);
+static GstFlowReturn theora_enc_chain (GstPad * pad, GstBuffer * buffer);
 static GstElementStateReturn theora_enc_change_state (GstElement * element);
-static GstPadLinkReturn theora_enc_sink_link (GstPad * pad,
-    const GstCaps * caps);
+static gboolean theora_enc_sink_setcaps (GstPad * pad, GstCaps * caps);
 static void theora_enc_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
 static void theora_enc_set_property (GObject * object, guint prop_id,
@@ -255,13 +255,13 @@ gst_theora_enc_init (GstTheoraEnc * enc)
       gst_pad_new_from_template (gst_static_pad_template_get
       (&theora_enc_sink_factory), "sink");
   gst_pad_set_chain_function (enc->sinkpad, theora_enc_chain);
-  gst_pad_set_link_function (enc->sinkpad, theora_enc_sink_link);
+  gst_pad_set_event_function (enc->sinkpad, theora_enc_sink_event);
+  gst_pad_set_setcaps_function (enc->sinkpad, theora_enc_sink_setcaps);
   gst_element_add_pad (GST_ELEMENT (enc), enc->sinkpad);
 
   enc->srcpad =
       gst_pad_new_from_template (gst_static_pad_template_get
       (&theora_enc_src_factory), "src");
-  gst_pad_use_explicit_caps (enc->srcpad);
   gst_element_add_pad (GST_ELEMENT (enc), enc->srcpad);
 
   enc->center = THEORA_DEF_CENTER;
@@ -276,21 +276,16 @@ gst_theora_enc_init (GstTheoraEnc * enc)
   enc->keyframe_threshold = THEORA_DEF_KEYFRAME_THRESHOLD;
   enc->keyframe_mindistance = THEORA_DEF_KEYFRAME_MINDISTANCE;
   enc->noise_sensitivity = THEORA_DEF_NOISE_SENSITIVITY;
-
-  GST_FLAG_SET (enc, GST_ELEMENT_EVENT_AWARE);
 }
 
-static GstPadLinkReturn
-theora_enc_sink_link (GstPad * pad, const GstCaps * caps)
+static gboolean
+theora_enc_sink_setcaps (GstPad * pad, GstCaps * caps)
 {
   GstStructure *structure = gst_caps_get_structure (caps, 0);
   GstTheoraEnc *enc = GST_THEORA_ENC (gst_pad_get_parent (pad));
   const GValue *par;
   GValue fps = { 0 };
   GValue framerate = { 0 };
-
-  if (!gst_caps_is_fixed (caps))
-    return GST_PAD_LINK_DELAYED;
 
   gst_structure_get_int (structure, "width", &enc->width);
   gst_structure_get_int (structure, "height", &enc->height);
@@ -352,7 +347,7 @@ theora_enc_sink_link (GstPad * pad, const GstCaps * caps)
 
   theora_encode_init (&enc->state, &enc->info);
 
-  return GST_PAD_LINK_OK;
+  return TRUE;
 }
 
 /* prepare a buffer for transmission by passing data through libtheora */
@@ -363,7 +358,7 @@ theora_buffer_from_packet (GstTheoraEnc * enc, ogg_packet * packet,
   GstBuffer *buf;
 
   buf = gst_pad_alloc_buffer (enc->srcpad,
-      GST_BUFFER_OFFSET_NONE, packet->bytes);
+      GST_BUFFER_OFFSET_NONE, packet->bytes, GST_PAD_CAPS (enc->srcpad));
   memcpy (GST_BUFFER_DATA (buf), packet->packet, packet->bytes);
   GST_BUFFER_OFFSET (buf) = enc->bytes_out;
   GST_BUFFER_OFFSET_END (buf) = packet->granulepos;
@@ -392,7 +387,7 @@ theora_push_buffer (GstTheoraEnc * enc, GstBuffer * buffer)
   enc->bytes_out += GST_BUFFER_SIZE (buffer);
 
   if (GST_PAD_IS_USABLE (enc->srcpad)) {
-    gst_pad_push (enc->srcpad, GST_DATA (buffer));
+    gst_pad_push (enc->srcpad, buffer);
   } else {
     gst_buffer_unref (buffer);
   }
@@ -439,31 +434,38 @@ theora_set_header_on_caps (GstCaps * caps, GstBuffer * buf1,
   g_value_unset (&list);
 }
 
-static void
-theora_enc_chain (GstPad * pad, GstData * data)
+static gboolean
+theora_enc_sink_event (GstPad * pad, GstEvent * event)
+{
+  GstTheoraEnc *enc;
+  ogg_packet op;
+
+  enc = GST_THEORA_ENC (GST_PAD_PARENT (pad));
+
+  switch (GST_EVENT_TYPE (event)) {
+    case GST_EVENT_EOS:
+      /* push last packet with eos flag */
+      while (theora_encode_packetout (&enc->state, 1, &op)) {
+        GstClockTime out_time =
+            theora_granule_time (&enc->state, op.granulepos) * GST_SECOND;
+        theora_push_packet (enc, &op, out_time, GST_SECOND / enc->fps);
+      }
+    default:
+      return gst_pad_event_default (pad, event);
+  }
+}
+
+static GstFlowReturn
+theora_enc_chain (GstPad * pad, GstBuffer * buffer)
 {
   GstTheoraEnc *enc;
   ogg_packet op;
   GstBuffer *buf;
   GstClockTime in_time;
 
-  enc = GST_THEORA_ENC (gst_pad_get_parent (pad));
-  if (GST_IS_EVENT (data)) {
-    switch (GST_EVENT_TYPE (data)) {
-      case GST_EVENT_EOS:
-        /* push last packet with eos flag */
-        while (theora_encode_packetout (&enc->state, 1, &op)) {
-          GstClockTime out_time =
-              theora_granule_time (&enc->state, op.granulepos) * GST_SECOND;
-          theora_push_packet (enc, &op, out_time, GST_SECOND / enc->fps);
-        }
-      default:
-        gst_pad_event_default (pad, GST_EVENT (data));
-        return;
-    }
-  }
+  enc = GST_THEORA_ENC (GST_PAD_PARENT (pad));
 
-  buf = GST_BUFFER (data);
+  buf = GST_BUFFER (buffer);
   in_time = GST_BUFFER_TIMESTAMP (buf);
 
   /* no packets written yet, setup headers */
@@ -495,7 +497,7 @@ theora_enc_chain (GstPad * pad, GstData * data)
 
     /* negotiate with these caps */
     GST_DEBUG ("here are the caps: %" GST_PTR_FORMAT, caps);
-    gst_pad_try_set_caps (enc->srcpad, caps);
+    gst_pad_set_caps (enc->srcpad, caps);
 
     /* push out the header buffers */
     theora_push_buffer (enc, buf1);
@@ -554,7 +556,7 @@ theora_enc_chain (GstPad * pad, GstData * data)
       dst_uv_stride = enc->info_width / 2;
 
       newbuf = gst_pad_alloc_buffer (enc->srcpad,
-          GST_BUFFER_OFFSET_NONE, y_size * 3 / 2);
+          GST_BUFFER_OFFSET_NONE, y_size * 3 / 2, GST_PAD_CAPS (enc->srcpad));
 
       dest_y = yuv.y = GST_BUFFER_DATA (newbuf);
       dest_u = yuv.u = yuv.y + y_size;
@@ -655,6 +657,8 @@ theora_enc_chain (GstPad * pad, GstData * data)
 
     gst_buffer_unref (buf);
   }
+
+  return GST_FLOW_OK;
 }
 
 static GstElementStateReturn

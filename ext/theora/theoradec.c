@@ -109,7 +109,8 @@ static void theora_dec_get_property (GObject * object, guint prop_id,
 static void theora_dec_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec);
 
-static void theora_dec_chain (GstPad * pad, GstData * data);
+static gboolean theora_dec_sink_event (GstPad * pad, GstEvent * event);
+static GstFlowReturn theora_dec_chain (GstPad * pad, GstBuffer * buffer);
 static GstElementStateReturn theora_dec_change_state (GstElement * element);
 static gboolean theora_dec_src_event (GstPad * pad, GstEvent * event);
 static gboolean theora_dec_src_query (GstPad * pad,
@@ -164,13 +165,13 @@ gst_theora_dec_init (GstTheoraDec * dec)
       (&theora_dec_sink_factory), "sink");
   gst_pad_set_formats_function (dec->sinkpad, theora_get_formats);
   gst_pad_set_convert_function (dec->sinkpad, theora_dec_sink_convert);
+  gst_pad_set_event_function (dec->sinkpad, theora_dec_sink_event);
   gst_pad_set_chain_function (dec->sinkpad, theora_dec_chain);
   gst_element_add_pad (GST_ELEMENT (dec), dec->sinkpad);
 
   dec->srcpad =
       gst_pad_new_from_template (gst_static_pad_template_get
       (&theora_dec_src_factory), "src");
-  gst_pad_use_explicit_caps (dec->srcpad);
   gst_pad_set_event_mask_function (dec->srcpad, theora_get_event_masks);
   gst_pad_set_event_function (dec->srcpad, theora_dec_src_event);
   gst_pad_set_query_type_function (dec->srcpad, theora_get_query_types);
@@ -179,8 +180,6 @@ gst_theora_dec_init (GstTheoraDec * dec)
   gst_pad_set_convert_function (dec->srcpad, theora_dec_src_convert);
 
   gst_element_add_pad (GST_ELEMENT (dec), dec->srcpad);
-
-  GST_FLAG_SET (dec, GST_ELEMENT_EVENT_AWARE);
 
   dec->crop = THEORA_DEF_CROP;
 }
@@ -455,10 +454,13 @@ theora_dec_src_event (GstPad * pad, GstEvent * event)
   return res;
 }
 
-static void
-theora_dec_event (GstTheoraDec * dec, GstEvent * event)
+static gboolean
+theora_dec_sink_event (GstPad * pad, GstEvent * event)
 {
   guint64 value, time, bytes;
+  GstTheoraDec *dec;
+
+  dec = GST_THEORA_DEC (GST_PAD_PARENT (pad));
 
   GST_LOG_OBJECT (dec, "handling event");
   switch (GST_EVENT_TYPE (event)) {
@@ -477,9 +479,9 @@ theora_dec_event (GstTheoraDec * dec, GstEvent * event)
           GST_ELEMENT_ERROR (dec, STREAM, DECODE, (NULL),
               ("can't handle discont before parsing first 3 packets"));
         dec->packetno = 0;
-        gst_pad_push (dec->srcpad, GST_DATA (gst_event_new_discontinuous (FALSE,
-                    GST_FORMAT_TIME, (guint64) 0, GST_FORMAT_DEFAULT,
-                    (guint64) 0, GST_FORMAT_BYTES, (guint64) 0, 0)));
+        gst_pad_push_event (dec->srcpad, gst_event_new_discontinuous (FALSE,
+                GST_FORMAT_TIME, (guint64) 0, GST_FORMAT_DEFAULT,
+                (guint64) 0, GST_FORMAT_BYTES, (guint64) 0, 0));
       } else {
         GstFormat time_format, default_format, bytes_format;
 
@@ -494,10 +496,9 @@ theora_dec_event (GstTheoraDec * dec, GstEvent * event)
                 &default_format, &value)
             && theora_dec_src_convert (dec->srcpad, GST_FORMAT_TIME, time,
                 &bytes_format, &bytes)) {
-          gst_pad_push (dec->srcpad,
-              GST_DATA (gst_event_new_discontinuous (FALSE, GST_FORMAT_TIME,
-                      time, GST_FORMAT_DEFAULT, value, GST_FORMAT_BYTES, bytes,
-                      0)));
+          gst_pad_push_event (dec->srcpad,
+              gst_event_new_discontinuous (FALSE, GST_FORMAT_TIME,
+                  time, GST_FORMAT_DEFAULT, value, GST_FORMAT_BYTES, bytes, 0));
           /* store new framenumber */
           dec->packetno = value + 3;
         } else {
@@ -511,29 +512,26 @@ theora_dec_event (GstTheoraDec * dec, GstEvent * event)
     default:
       break;
   }
-  gst_pad_event_default (dec->sinkpad, event);
+  return gst_pad_event_default (dec->sinkpad, event);
 }
 
 #define ROUND_UP_2(x) (((x) + 1) & ~1)
 #define ROUND_UP_4(x) (((x) + 3) & ~3)
 #define ROUND_UP_8(x) (((x) + 7) & ~7)
 
-static void
-theora_dec_chain (GstPad * pad, GstData * data)
+static GstFlowReturn
+theora_dec_chain (GstPad * pad, GstBuffer * buffer)
 {
   GstBuffer *buf;
   GstTheoraDec *dec;
   ogg_packet packet;
   guint64 offset_end;
   GstClockTime outtime;
+  GstFlowReturn result = GST_FLOW_OK;
 
-  dec = GST_THEORA_DEC (gst_pad_get_parent (pad));
-  if (GST_IS_EVENT (data)) {
-    theora_dec_event (dec, GST_EVENT (data));
-    return;
-  }
+  dec = GST_THEORA_DEC (GST_PAD_PARENT (pad));
 
-  buf = GST_BUFFER (data);
+  buf = GST_BUFFER (buffer);
 
   if (dec->packetno >= 3) {
     offset_end = GST_BUFFER_OFFSET_END (buf);
@@ -569,6 +567,7 @@ theora_dec_chain (GstPad * pad, GstData * data)
     if (theora_decode_header (&dec->info, &dec->comment, &packet)) {
       GST_ELEMENT_ERROR (GST_ELEMENT (dec), STREAM, DECODE,
           (NULL), ("couldn't read header packet"));
+      result = GST_FLOW_ERROR;
       goto done;
     }
 
@@ -593,7 +592,7 @@ theora_dec_chain (GstPad * pad, GstData * data)
           GST_TAG_ENCODER_VERSION, dec->info.version_major,
           GST_TAG_NOMINAL_BITRATE, dec->info.target_bitrate,
           GST_TAG_VIDEO_CODEC, "Theora", NULL);
-      gst_element_found_tags_for_pad (GST_ELEMENT (dec), dec->srcpad, 0, list);
+      //gst_element_found_tags_for_pad (GST_ELEMENT (dec), dec->srcpad, 0, list);
 
       dec->packetno++;
     } else if (packet.packetno == 2) {
@@ -655,8 +654,8 @@ theora_dec_chain (GstPad * pad, GstData * data)
           "pixel-aspect-ratio", GST_TYPE_FRACTION, par_num, par_den,
           "width", G_TYPE_INT, dec->width, "height", G_TYPE_INT,
           dec->height, NULL);
-      gst_pad_set_explicit_caps (dec->srcpad, caps);
-      gst_caps_free (caps);
+      gst_pad_set_caps (dec->srcpad, caps);
+      gst_caps_unref (caps);
 
       dec->initialized = TRUE;
       dec->packetno++;
@@ -675,6 +674,7 @@ theora_dec_chain (GstPad * pad, GstData * data)
     dec->packetno++;
 
     if (!dec->initialized) {
+      result = GST_FLOW_ERROR;
       goto done;
     }
 
@@ -711,16 +711,18 @@ theora_dec_chain (GstPad * pad, GstData * data)
     if (theora_decode_packetin (&dec->state, &packet)) {
       GST_ELEMENT_ERROR (GST_ELEMENT (dec), STREAM, DECODE,
           (NULL), ("theora decoder did not read data packet"));
+      result = GST_FLOW_ERROR;
       goto done;
     }
     if (theora_decode_YUVout (&dec->state, &yuv) < 0) {
       GST_ELEMENT_ERROR (GST_ELEMENT (dec), STREAM, DECODE,
           (NULL), ("couldn't read out YUV image"));
+      result = GST_FLOW_ERROR;
       goto done;
     }
 
-    g_return_if_fail (yuv.y_width == dec->info.width);
-    g_return_if_fail (yuv.y_height == dec->info.height);
+    g_return_val_if_fail (yuv.y_width == dec->info.width, GST_FLOW_ERROR);
+    g_return_val_if_fail (yuv.y_height == dec->info.height, GST_FLOW_ERROR);
 
     width = dec->width;
     height = dec->height;
@@ -737,7 +739,8 @@ theora_dec_chain (GstPad * pad, GstData * data)
 
     /* now copy over the area contained in offset_x,offset_y,
      * frame_width, frame_height */
-    out = gst_pad_alloc_buffer (dec->srcpad, GST_BUFFER_OFFSET_NONE, out_size);
+    out = gst_pad_alloc_buffer (dec->srcpad, GST_BUFFER_OFFSET_NONE, out_size,
+        GST_PAD_CAPS (dec->srcpad));
 
     /* copy the visible region to the destination. This is actually pretty
      * complicated and gstreamer doesn't support all the needed caps to do this
@@ -785,11 +788,13 @@ theora_dec_chain (GstPad * pad, GstData * data)
         dec->info.fps_numerator;
     GST_BUFFER_TIMESTAMP (out) = outtime;
 
-    gst_pad_push (dec->srcpad, GST_DATA (out));
+    result = gst_pad_push (dec->srcpad, out);
   }
 done:
-  gst_data_unref (data);
+  gst_buffer_unref (buffer);
   dec->granulepos++;
+
+  return result;
 }
 
 static GstElementStateReturn

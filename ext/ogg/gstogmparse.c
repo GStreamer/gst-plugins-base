@@ -133,7 +133,7 @@ static const GstFormat *gst_ogm_parse_get_sink_formats (GstPad * pad);
 static gboolean gst_ogm_parse_sink_convert (GstPad * pad, GstFormat src_format,
     gint64 src_value, GstFormat * dest_format, gint64 * dest_value);
 
-static void gst_ogm_parse_chain (GstPad * pad, GstData * data);
+static GstFlowReturn gst_ogm_parse_chain (GstPad * pad, GstBuffer * buffer);
 
 static GstElementStateReturn gst_ogm_parse_change_state (GstElement * element);
 
@@ -366,11 +366,11 @@ gst_ogm_parse_sink_convert (GstPad * pad,
   return res;
 }
 
-static void
-gst_ogm_parse_chain (GstPad * pad, GstData * dat)
+static GstFlowReturn
+gst_ogm_parse_chain (GstPad * pad, GstBuffer * buffer)
 {
   GstOgmParse *ogm = GST_OGM_PARSE (gst_pad_get_parent (pad));
-  GstBuffer *buf = GST_BUFFER (dat);
+  GstBuffer *buf = GST_BUFFER (buffer);
   guint8 *data = GST_BUFFER_DATA (buf);
   guint size = GST_BUFFER_SIZE (buf);
 
@@ -453,13 +453,13 @@ gst_ogm_parse_chain (GstPad * pad, GstData * dat)
       }
 
       ogm->srcpad = gst_pad_new_from_template (ogm->srcpadtempl, "src");
-      gst_pad_use_explicit_caps (ogm->srcpad);
-      if (!gst_pad_set_explicit_caps (ogm->srcpad, caps)) {
-        GST_ELEMENT_ERROR (ogm, CORE, NEGOTIATION, (NULL), (NULL));
-        //gst_object_unref (GST_OBJECT (ogm->srcpad));
-        ogm->srcpad = NULL;
-        break;
-      }
+      //gst_pad_use_explicit_caps (ogm->srcpad);
+      //if (!gst_pad_set_explicit_caps (ogm->srcpad, caps)) {
+      //  GST_ELEMENT_ERROR (ogm, CORE, NEGOTIATION, (NULL), (NULL));
+      //gst_object_unref (GST_OBJECT (ogm->srcpad));
+      //  ogm->srcpad = NULL;
+      //  break;
+      //}
       gst_element_add_pad (GST_ELEMENT (ogm), ogm->srcpad);
       break;
     }
@@ -510,7 +510,7 @@ gst_ogm_parse_chain (GstPad * pad, GstData * dat)
           default:
             g_assert_not_reached ();
         }
-        gst_pad_push (ogm->srcpad, GST_DATA (sbuf));
+        gst_pad_push (ogm->srcpad, sbuf);
       } else {
         GST_ELEMENT_ERROR (ogm, STREAM, WRONG_TYPE,
             ("Wrong packet startcode 0x%02x", data[0]), (NULL));
@@ -519,6 +519,8 @@ gst_ogm_parse_chain (GstPad * pad, GstData * dat)
   }
 
   gst_buffer_unref (buf);
+
+  return GST_FLOW_OK;
 }
 
 static GstElementStateReturn
