@@ -897,6 +897,7 @@ static GstBuffer *gst_gnomevfssrc_get(GstPad *pad)
 				gst_gnomevfssrc_get_icy_metadata (src);
 				src->icy_count = 0;
 			}
+			src->in_first_get = FALSE;
 		} while (src->in_first_get
 			 && GST_BUFFER_OFFSET (buf) < 8000 &&
 			 src->icy_metaint - src->icy_count >= 8000);
@@ -1008,6 +1009,8 @@ static gboolean gst_gnomevfssrc_open_file(GstGnomeVFSSrc *src)
 	audiocast_do_notifications(src);
 	
 	GST_DEBUG(0, "open result: %s", gnome_vfs_result_to_string (result));
+
+	src->in_first_get = TRUE;
 
 	GST_FLAG_SET(src, GST_GNOMEVFSSRC_OPEN);
 
