@@ -31,6 +31,8 @@ main (int argc, char *argv[])
 
   autoplugger = gst_autoplug_factory_make ("static");
 
+  g_assert (autoplugger);
+
   g_signal_connect (G_OBJECT (autoplugger), "new_object",
 		    G_CALLBACK (new_object_added), NULL);
 
