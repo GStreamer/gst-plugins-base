@@ -57,11 +57,11 @@ struct _GstSineSrc {
   GstDParamManager *dpman;
 
   /* parameters */
-  gfloat volume;
-  gfloat freq;
+  gdouble volume;
+  gdouble freq;
   
   /* lookup table data */
-  gfloat *table_data;
+  gdouble *table_data;
   gdouble table_pos;
   gdouble table_inc;
   gint table_size;
@@ -70,8 +70,7 @@ struct _GstSineSrc {
   gint table_lookup_next;
     
   /* audio parameters */
-  gint width;
-  gint samplerate;
+  gint rate;
 
   gint samples_per_buffer;
   gulong seq;

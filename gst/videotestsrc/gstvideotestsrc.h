@@ -56,7 +56,7 @@ struct _GstVideotestsrc {
   gint default_width;
   gint default_height;
   gboolean sync;
-  gfloat default_rate;
+  double default_rate;
 
   /* video state */
   char *format_name;
@@ -69,7 +69,7 @@ struct _GstVideotestsrc {
   gint64 timestamp_offset;
   gint64 n_frames;
   gint bpp;
-  gfloat rate;
+  gdouble rate;
   int type;
   GstClock *clock;
 
