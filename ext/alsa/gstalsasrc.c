@@ -268,8 +268,8 @@ gst_alsa_src_set_caps (GstAlsaSrc *src, gboolean aggressive)
   for (i = 0; i < gst_caps2_get_n_structures (all_caps); i++) {
     walk = gst_caps2_get_nth_cap (all_caps, i);
     if (!(gst_structure_get_int (walk, "signed", &sign) &&
-	  gst_structure_get_int (walk, "width", &sign) &&
-	  gst_structure_get_int (walk, "depth", &sign))) {
+	  gst_structure_get_int (walk, "width", &width) &&
+	  gst_structure_get_int (walk, "depth", &depth))) {
       GST_ERROR_OBJECT (src, "couldn't parse my own format. Huh?");
       continue;
     }
