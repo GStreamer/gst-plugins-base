@@ -256,7 +256,7 @@ aac_type_find (GstTypeFind * tf, gpointer unused)
           NULL);
 
       gst_type_find_suggest (tf, GST_TYPE_FIND_MAXIMUM, caps);
-      gst_caps_free (caps);
+      gst_caps_unref (caps);
     }
   }
 }
@@ -496,7 +496,7 @@ mp3_type_find (GstTypeFind * tf, gpointer unused)
             gst_structure_set (gst_caps_get_structure (caps, 0), "layer",
                 G_TYPE_INT, layer, 0);
             gst_type_find_suggest (tf, probability, caps);
-            gst_caps_free (caps);
+            gst_caps_unref (caps);
           }
           return;
         }
@@ -563,7 +563,7 @@ mpeg2_sys_type_find (GstTypeFind * tf, gpointer unused)
       gst_structure_set (gst_caps_get_structure (caps, 0), "mpegversion",
           G_TYPE_INT, 1, 0);
       gst_type_find_suggest (tf, GST_TYPE_FIND_MAXIMUM, caps);
-      gst_caps_free (caps);
+      gst_caps_unref (caps);
     }
   }
 };
@@ -697,7 +697,7 @@ mpeg1_sys_type_find (GstTypeFind * tf, gpointer unused)
         gst_structure_set (gst_caps_get_structure (caps, 0), "mpegversion",
             G_TYPE_INT, 1, 0);
         gst_type_find_suggest (tf, GST_TYPE_FIND_MAXIMUM - 1, caps);
-        gst_caps_free (caps);
+        gst_caps_unref (caps);
         return;
       }
     }
@@ -726,7 +726,7 @@ mpeg_video_type_find (GstTypeFind * tf, gpointer unused)
     gst_structure_set (gst_caps_get_structure (caps, 0), "mpegversion",
         G_TYPE_INT, 1, 0);
     gst_type_find_suggest (tf, GST_TYPE_FIND_MAXIMUM - 1, caps);
-    gst_caps_free (caps);
+    gst_caps_unref (caps);
   }
 }
 
@@ -757,7 +757,7 @@ mpeg_video_stream_type_find (GstTypeFind * tf, gpointer unused)
       gst_structure_set (gst_caps_get_structure (caps, 0), "mpegversion",
           G_TYPE_INT, 1, 0);
       gst_type_find_suggest (tf, GST_TYPE_FIND_MAXIMUM - 2, caps);
-      gst_caps_free (caps);
+      gst_caps_unref (caps);
       return;
     }
 
@@ -1211,7 +1211,7 @@ dv_type_find (GstTypeFind * tf, gpointer private)
         G_TYPE_STRING, format, NULL);
 
     gst_type_find_suggest (tf, GST_TYPE_FIND_MAXIMUM, caps);
-    gst_caps_free (caps);
+    gst_caps_unref (caps);
   }
 }
 

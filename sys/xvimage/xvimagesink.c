@@ -816,7 +816,7 @@ gst_xvimagesink_get_xv_support (GstXvImageSink * xvimagesink,
   GST_DEBUG ("Generated the following caps: %" GST_PTR_FORMAT, caps);
 
   if (gst_caps_is_empty (caps)) {
-    gst_caps_free (caps);
+    gst_caps_unref (caps);
     XvUngrabPort (xcontext->disp, xcontext->xv_port_id, 0);
     GST_ELEMENT_ERROR (xvimagesink, STREAM, WRONG_TYPE, (NULL),
         ("No supported format found"));
@@ -1061,7 +1061,7 @@ gst_xvimagesink_xcontext_clear (GstXvImageSink * xvimagesink)
   while (formats_list) {
     GstXvImageFormat *format = formats_list->data;
 
-    gst_caps_free (format->caps);
+    gst_caps_unref (format->caps);
     g_free (format);
     formats_list = g_list_next (formats_list);
   }
@@ -1081,7 +1081,7 @@ gst_xvimagesink_xcontext_clear (GstXvImageSink * xvimagesink)
   if (xvimagesink->xcontext->channels_list)
     g_list_free (xvimagesink->xcontext->channels_list);
 
-  gst_caps_free (xvimagesink->xcontext->caps);
+  gst_caps_unref (xvimagesink->xcontext->caps);
   g_free (xvimagesink->xcontext->par);
 
   g_mutex_lock (xvimagesink->x_lock);
@@ -1115,6 +1115,7 @@ gst_xvimagesink_imagepool_clear (GstXvImageSink * xvimagesink)
 
 /* Element stuff */
 
+#if 0
 static GstCaps *
 gst_xvimagesink_fixate (GstPad * pad, const GstCaps * caps)
 {
@@ -1138,9 +1139,10 @@ gst_xvimagesink_fixate (GstPad * pad, const GstCaps * caps)
     return newcaps;
   }
 
-  gst_caps_free (newcaps);
+  gst_caps_unref (newcaps);
   return NULL;
 }
+#endif
 
 /* This function tries to get a format matching with a given caps in the
    supported list of formats we generated in gst_xvimagesink_get_xv_support */
@@ -1175,7 +1177,7 @@ gst_xvimagesink_getcaps (GstPad * pad)
 {
   GstXvImageSink *xvimagesink;
 
-  xvimagesink = GST_XVIMAGESINK (gst_pad_get_parent (pad));
+  xvimagesink = GST_XVIMAGESINK (GST_PAD_PARENT (pad));
 
   if (xvimagesink->xcontext)
     return gst_caps_copy (xvimagesink->xcontext->caps);
@@ -1184,7 +1186,13 @@ gst_xvimagesink_getcaps (GstPad * pad)
 }
 
 static GstPadLinkReturn
-gst_xvimagesink_sink_link (GstPad * pad, const GstCaps * caps)
+gst_xvimagesink_sink_link (GstPad * pad, GstPad * peer)
+{
+  return GST_PAD_LINK_OK;
+}
+
+static gboolean
+gst_xvimagesink_parse_caps (GstPad * pad, const GstCaps * caps)
 {
   GstXvImageSink *xvimagesink;
   GstStructure *structure;
@@ -1197,7 +1205,7 @@ gst_xvimagesink_sink_link (GstPad * pad, const GstCaps * caps)
   const GValue *caps_par;
   gint num, den;
 
-  xvimagesink = GST_XVIMAGESINK (gst_pad_get_parent (pad));
+  xvimagesink = GST_XVIMAGESINK (GST_PAD_PARENT (pad));
 
   GST_DEBUG_OBJECT (xvimagesink,
       "sinkconnect possible caps %" GST_PTR_FORMAT " with given caps %"
@@ -1209,7 +1217,7 @@ gst_xvimagesink_sink_link (GstPad * pad, const GstCaps * caps)
   ret &= gst_structure_get_double (structure, "framerate",
       &xvimagesink->framerate);
   if (!ret)
-    return GST_PAD_LINK_REFUSED;
+    return FALSE;
 
   xvimagesink->video_width = video_width;
   xvimagesink->video_height = video_height;
@@ -1219,7 +1227,7 @@ gst_xvimagesink_sink_link (GstPad * pad, const GstCaps * caps)
         gst_caps_copy (caps));
   }
   if (im_format == 0) {
-    return GST_PAD_LINK_REFUSED;
+    return FALSE;
   }
 
   /* get aspect ratio from caps if it's present, and
@@ -1311,13 +1319,14 @@ gst_xvimagesink_sink_link (GstPad * pad, const GstCaps * caps)
   gst_x_overlay_got_desired_size (GST_X_OVERLAY (xvimagesink),
       GST_VIDEOSINK_WIDTH (xvimagesink), GST_VIDEOSINK_HEIGHT (xvimagesink));
 
-  return GST_PAD_LINK_OK;
+  return TRUE;
 }
 
 static GstElementStateReturn
 gst_xvimagesink_change_state (GstElement * element)
 {
   GstXvImageSink *xvimagesink;
+  GstElementStateReturn result = GST_STATE_SUCCESS;
 
   xvimagesink = GST_XVIMAGESINK (element);
 
@@ -1343,6 +1352,7 @@ gst_xvimagesink_change_state (GstElement * element)
       if (xvimagesink->xwindow)
         gst_xvimagesink_xwindow_clear (xvimagesink, xvimagesink->xwindow);
       xvimagesink->time = 0;
+      result = GST_STATE_ASYNC;
       break;
     case GST_STATE_PAUSED_TO_PLAYING:
       break;
@@ -1374,38 +1384,91 @@ gst_xvimagesink_change_state (GstElement * element)
       break;
   }
 
-  if (GST_ELEMENT_CLASS (parent_class)->change_state)
-    return GST_ELEMENT_CLASS (parent_class)->change_state (element);
+  GST_ELEMENT_CLASS (parent_class)->change_state (element);
 
-  return GST_STATE_SUCCESS;
+  return result;
 }
 
-static void
-gst_xvimagesink_chain (GstPad * pad, GstData * data)
+static gboolean
+gst_xvimagesink_event (GstPad * pad, GstEvent * event)
+{
+  gboolean result;
+  GstXvImageSink *xvimagesink;
+
+  xvimagesink = GST_XVIMAGESINK (GST_PAD_PARENT (pad));
+
+  GST_STREAM_LOCK (pad);
+  switch (GST_EVENT_TYPE (event)) {
+    case GST_EVENT_EOS:
+      gst_element_finish_preroll (GST_ELEMENT (xvimagesink),
+          GST_STREAM_GET_LOCK (pad));
+      gst_clock_id_wait (gst_clock_new_single_shot_id (GST_VIDEOSINK_CLOCK
+              (xvimagesink),
+              xvimagesink->end_time + GST_ELEMENT (xvimagesink)->base_time),
+          NULL);
+      gst_element_post_message (GST_ELEMENT (xvimagesink),
+          gst_message_new_eos (GST_OBJECT (xvimagesink)));
+      result = TRUE;
+      break;
+    default:
+      result = gst_pad_event_default (pad, event);
+      break;
+  }
+  GST_STREAM_UNLOCK (pad);
+
+  return result;
+}
+
+static GstFlowReturn
+gst_xvimagesink_chain (GstPad * pad, GstBuffer * buffer)
 {
   GstBuffer *buf = NULL;
   GstXvImageSink *xvimagesink;
+  GstCaps *caps;
+  GstFlowReturn result;
 
-  g_return_if_fail (GST_IS_PAD (pad));
-  g_return_if_fail (data != NULL);
+  xvimagesink = GST_XVIMAGESINK (GST_PAD_PARENT (pad));
 
-  xvimagesink = GST_XVIMAGESINK (gst_pad_get_parent (pad));
+  buf = GST_BUFFER (buffer);
 
-  if (GST_IS_EVENT (data)) {
-    gst_pad_event_default (pad, GST_EVENT (data));
-    return;
+  caps = gst_buffer_get_caps (buffer);
+  if (caps && caps != GST_PAD_CAPS (pad)) {
+    if (gst_xvimagesink_parse_caps (pad, caps)) {
+      gst_pad_set_caps (pad, caps);
+    } else {
+      GST_ELEMENT_ERROR (xvimagesink, CORE, NEGOTIATION, (NULL),
+          ("received unkown format"));
+      gst_element_abort_preroll (GST_ELEMENT (xvimagesink));
+      return GST_FLOW_NOT_NEGOTIATED;
+    }
+  }
+  if (!GST_PAD_CAPS (pad)) {
+    return GST_FLOW_NOT_NEGOTIATED;
   }
 
-  buf = GST_BUFFER (data);
+  GST_STREAM_LOCK (pad);
+  result =
+      gst_element_finish_preroll (GST_ELEMENT (xvimagesink),
+      GST_STREAM_GET_LOCK (pad));
+  if (result != GST_FLOW_OK) {
+    goto done;
+  }
+
   /* update time */
   if (GST_BUFFER_TIMESTAMP_IS_VALID (buf)) {
     xvimagesink->time = GST_BUFFER_TIMESTAMP (buf);
+    if (GST_BUFFER_DURATION_IS_VALID (buf)) {
+      xvimagesink->end_time = GST_BUFFER_DURATION (buf) + xvimagesink->time;
+    }
   }
   GST_LOG_OBJECT (xvimagesink, "clock wait: %" GST_TIME_FORMAT,
       GST_TIME_ARGS (xvimagesink->time));
 
   if (GST_VIDEOSINK_CLOCK (xvimagesink)) {
-    gst_element_wait (GST_ELEMENT (xvimagesink), xvimagesink->time);
+    //gst_element_wait (GST_ELEMENT (xvimagesink), xvimagesink->time);
+    gst_clock_id_wait (gst_clock_new_single_shot_id (GST_VIDEOSINK_CLOCK
+            (xvimagesink),
+            xvimagesink->time + GST_ELEMENT (xvimagesink)->base_time), NULL);
   }
 
   /* If this buffer has been allocated using our buffer management we simply
@@ -1424,7 +1487,7 @@ gst_xvimagesink_chain (GstPad * pad, GstData * data)
         gst_buffer_unref (buf);
         GST_ELEMENT_ERROR (xvimagesink, CORE, NEGOTIATION, (NULL),
             ("Failed creating an XvImage in xvimagesink chain function."));
-        return;
+        return GST_FLOW_ERROR;
       }
     }
 
@@ -1439,9 +1502,15 @@ gst_xvimagesink_chain (GstPad * pad, GstData * data)
     xvimagesink->time += GST_SECOND / xvimagesink->framerate;
   }
 
+  result = GST_FLOW_OK;
+
+done:
+  GST_STREAM_UNLOCK (pad);
   gst_buffer_unref (buf);
 
   gst_xvimagesink_handle_xevents (xvimagesink, pad);
+
+  return result;
 }
 
 /* Buffer management */
@@ -1471,20 +1540,28 @@ gst_xvimagesink_buffer_free (GstBuffer * buffer)
 }
 
 static GstBuffer *
-gst_xvimagesink_buffer_alloc (GstPad * pad, guint64 offset, guint size)
+gst_xvimagesink_buffer_alloc (GstPad * pad, guint64 offset, guint size,
+    GstCaps * caps)
 {
   GstXvImageSink *xvimagesink;
   GstBuffer *buffer;
   GstXvImage *xvimage = NULL;
-  gboolean not_found = TRUE;
 
-  xvimagesink = GST_XVIMAGESINK (gst_pad_get_parent (pad));
+  xvimagesink = GST_XVIMAGESINK (GST_PAD_PARENT (pad));
+
+  /* FIXME, we should just parse the caps, and provide a buffer in this format,
+   * we should not just reconfigure ourselves yet */
+  if (caps && caps != GST_PAD_CAPS (pad)) {
+    if (!gst_xvimagesink_parse_caps (pad, caps)) {
+      return NULL;
+    }
+  }
 
   g_mutex_lock (xvimagesink->pool_lock);
 
   /* Walking through the pool cleaning unusable images and searching for a
      suitable one */
-  while (not_found && xvimagesink->image_pool) {
+  while (xvimagesink->image_pool) {
     xvimage = xvimagesink->image_pool->data;
 
     if (xvimage) {
@@ -1524,6 +1601,7 @@ gst_xvimagesink_buffer_alloc (GstPad * pad, guint64 offset, guint size)
     GST_BUFFER_DATA (buffer) = xvimage->xvimage->data;
     GST_BUFFER_FREE_DATA_FUNC (buffer) = gst_xvimagesink_buffer_free;
     GST_BUFFER_SIZE (buffer) = xvimage->size;
+    gst_buffer_set_caps (buffer, caps);
     return buffer;
   } else
     return NULL;
@@ -1919,12 +1997,12 @@ gst_xvimagesink_init (GstXvImageSink * xvimagesink)
 
   gst_pad_set_chain_function (GST_VIDEOSINK_PAD (xvimagesink),
       gst_xvimagesink_chain);
+  gst_pad_set_event_function (GST_VIDEOSINK_PAD (xvimagesink),
+      gst_xvimagesink_event);
   gst_pad_set_link_function (GST_VIDEOSINK_PAD (xvimagesink),
       gst_xvimagesink_sink_link);
   gst_pad_set_getcaps_function (GST_VIDEOSINK_PAD (xvimagesink),
       gst_xvimagesink_getcaps);
-  gst_pad_set_fixate_function (GST_VIDEOSINK_PAD (xvimagesink),
-      gst_xvimagesink_fixate);
   gst_pad_set_bufferalloc_function (GST_VIDEOSINK_PAD (xvimagesink),
       gst_xvimagesink_buffer_alloc);
 
@@ -1949,9 +2027,6 @@ gst_xvimagesink_init (GstXvImageSink * xvimagesink)
 
   xvimagesink->synchronous = FALSE;
   xvimagesink->par = NULL;
-
-  GST_FLAG_SET (xvimagesink, GST_ELEMENT_THREAD_SUGGESTED);
-  GST_FLAG_SET (xvimagesink, GST_ELEMENT_EVENT_AWARE);
 }
 
 static void
@@ -1975,6 +2050,9 @@ gst_xvimagesink_class_init (GstXvImageSinkClass * klass)
   gstelement_class = (GstElementClass *) klass;
 
   parent_class = g_type_class_ref (GST_TYPE_VIDEOSINK);
+
+  gobject_class->set_property = gst_xvimagesink_set_property;
+  gobject_class->get_property = gst_xvimagesink_get_property;
 
   g_object_class_install_property (gobject_class, ARG_CONTRAST,
       g_param_spec_int ("contrast", "Contrast", "The contrast of the video",
@@ -2001,8 +2079,6 @@ gst_xvimagesink_class_init (GstXvImageSinkClass * klass)
           "The pixel aspect ratio of the device", "1/1", G_PARAM_READWRITE));
 
   gobject_class->finalize = gst_xvimagesink_finalize;
-  gobject_class->set_property = gst_xvimagesink_set_property;
-  gobject_class->get_property = gst_xvimagesink_get_property;
 
   gstelement_class->change_state = gst_xvimagesink_change_state;
 }

@@ -50,6 +50,8 @@ struct _GstVideotestsrc {
 
   GstPad *sinkpad, *srcpad;
 
+  GstTask *task;
+
   /* parameters */
   gboolean sync;
 

@@ -148,6 +148,7 @@ struct _GstXvImageSink {
   GValue *par;                         /* object-set pixel aspect ratio */
 
   GstClockTime time;
+  GstClockTime end_time;
 
   GMutex *pool_lock;
   GSList *image_pool;
