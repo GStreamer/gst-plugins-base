@@ -1275,13 +1275,13 @@ gst_ogg_demux_perform_seek (GstOggDemux * ogg, gint64 pos)
   while (begin < end) {
     gint64 bisect;
 
-    if (end - begin < CHUNKSIZE) {
+    if ((end - begin < CHUNKSIZE) || (endtime == begintime)) {
       bisect = begin;
     } else {
-      /* take a (pretty decent) guess. */
-      bisect = begin +
-          (target - begintime) * (end - begin) / (endtime - begintime) -
-          CHUNKSIZE;
+      /* take a (pretty decent) guess, avoiding overflow */
+      gint64 rate = (end - begin) * GST_MSECOND / (endtime - begintime);
+
+      bisect = (target - begintime) / GST_MSECOND * rate + begin - CHUNKSIZE;
 
       if (bisect <= begin)
         bisect = begin + 1;
