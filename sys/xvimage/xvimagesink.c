@@ -1357,6 +1357,11 @@ gst_xvimagesink_change_state (GstElement * element)
     case GST_STATE_PAUSED_TO_PLAYING:
       break;
     case GST_STATE_PLAYING_TO_PAUSED:
+      GST_LOCK (xvimagesink);
+      if (xvimagesink->clock_id) {
+        gst_clock_id_unschedule (xvimagesink->clock_id);
+      }
+      GST_UNLOCK (xvimagesink);
       result = GST_STATE_ASYNC;
       break;
     case GST_STATE_PAUSED_TO_READY:
@@ -1404,25 +1409,35 @@ gst_xvimagesink_event (GstPad * pad, GstEvent * event)
 
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_EOS:
+    {
+      GstClockID id;
+
       GST_STREAM_LOCK (pad);
       gst_xvimagesink_finish_preroll (xvimagesink, pad, NULL);
-      gst_clock_id_wait (gst_clock_new_single_shot_id (GST_VIDEOSINK_CLOCK
-              (xvimagesink),
-              xvimagesink->end_time + GST_ELEMENT (xvimagesink)->base_time),
-          NULL);
+      /* wait for last frame to finish */
+      id = gst_clock_new_single_shot_id (GST_VIDEOSINK_CLOCK (xvimagesink),
+          xvimagesink->end_time + GST_ELEMENT (xvimagesink)->base_time);
+      gst_clock_id_wait (id, NULL);
+      gst_clock_id_unref (id);
       gst_element_post_message (GST_ELEMENT (xvimagesink),
           gst_message_new_eos (GST_OBJECT (xvimagesink)));
       result = TRUE;
-      break;
       GST_STREAM_UNLOCK (pad);
+      break;
+    }
     case GST_EVENT_FLUSH:
+      /* make sure we are not blocked on the clock */
+      GST_LOCK (xvimagesink);
       if (xvimagesink->clock_id) {
-        gst_clock_id_unlock (xvimagesink->clock_id);
-        xvimagesink->clock_id = NULL;
+        gst_clock_id_unschedule (xvimagesink->clock_id);
       }
+      GST_UNLOCK (xvimagesink);
+      /* unlock from a possible state change/preroll */
       GST_STATE_LOCK (xvimagesink);
       g_cond_broadcast (GST_STATE_GET_COND (xvimagesink));
       GST_STATE_UNLOCK (xvimagesink);
+      /* now we are completely unblocked and the _chain method
+       * will return */
       result = TRUE;
       break;
     default:
@@ -1485,14 +1500,11 @@ gst_xvimagesink_finish_preroll (GstXvImageSink * xvimagesink, GstPad * pad,
     if (buf)
       gst_xvimagesink_show_frame (xvimagesink, buf);
 
-    //GST_STREAM_UNLOCK (pad);
-
     /* here we wait for the next state change */
     while (GST_STATE (xvimagesink) == GST_STATE_PAUSED) {
       if (GST_RPAD_IS_FLUSHING (pad)) {
         GST_DEBUG_OBJECT (xvimagesink, "pad is flushing");
         result = GST_FLOW_UNEXPECTED;
-        //GST_STREAM_LOCK (pad);
         goto done;
       }
 
@@ -1500,8 +1512,6 @@ gst_xvimagesink_finish_preroll (GstXvImageSink * xvimagesink, GstPad * pad,
       GST_STATE_WAIT (xvimagesink);
       GST_DEBUG_OBJECT (xvimagesink, "got unlocked, maybe a state change");
     }
-
-    //GST_STREAM_LOCK (pad);
 
     /* check if we got playing */
     if (GST_STATE (xvimagesink) != GST_STATE_PLAYING) {
@@ -1565,19 +1575,28 @@ gst_xvimagesink_chain (GstPad * pad, GstBuffer * buffer)
   if (GST_VIDEOSINK_CLOCK (xvimagesink)) {
     GstClockReturn ret;
 
-    //gst_element_wait (GST_ELEMENT (xvimagesink), xvimagesink->time);
+    /* save clock id so that we can unlock it if needed */
+    GST_LOCK (xvimagesink);
     xvimagesink->clock_id =
         gst_clock_new_single_shot_id (GST_VIDEOSINK_CLOCK (xvimagesink),
         xvimagesink->time + GST_ELEMENT (xvimagesink)->base_time);
+    GST_UNLOCK (xvimagesink);
 
     ret = gst_clock_id_wait (xvimagesink->clock_id, NULL);
+
+    GST_LOCK (xvimagesink);
+    gst_clock_id_unref (xvimagesink->clock_id);
     xvimagesink->clock_id = NULL;
+    GST_UNLOCK (xvimagesink);
+
     GST_LOG_OBJECT (xvimagesink, "clock entry done: %d", ret);
   }
 
   gst_xvimagesink_show_frame (xvimagesink, buf);
 
-  /* set correct time for next buffer */
+  /* set correct time for next buffer in case the next buffer does not
+   * have a timestamp. FIXME, this is not the job of xvimagesink and will
+   * make preview pipelines fail. */
   if (!GST_BUFFER_TIMESTAMP_IS_VALID (buf) && xvimagesink->framerate > 0) {
     xvimagesink->time += GST_SECOND / xvimagesink->framerate;
   }

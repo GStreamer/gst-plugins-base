@@ -71,7 +71,7 @@ static void gst_videotestsrc_set_property (GObject * object, guint prop_id,
 static void gst_videotestsrc_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
 
-static gboolean gst_videotestsrc_loop (GstPad * pad);
+static void gst_videotestsrc_loop (GstPad * pad);
 
 static const GstQueryType *gst_videotestsrc_get_query_types (GstPad * pad);
 static gboolean gst_videotestsrc_src_query (GstPad * pad,
@@ -611,7 +611,7 @@ gst_videotestsrc_handle_src_event (GstPad * pad, GstEvent * event)
   return res;
 }
 
-static gboolean
+static void
 gst_videotestsrc_loop (GstPad * pad)
 {
   GstVideotestsrc *videotestsrc;
@@ -630,7 +630,8 @@ gst_videotestsrc_loop (GstPad * pad)
       GST_ELEMENT_ERROR (videotestsrc, CORE, NEGOTIATION, (NULL),
           ("format could not be negotiated"));
       gst_pad_push_event (pad, gst_event_new (GST_EVENT_EOS));
-      return FALSE;
+      gst_task_pause (videotestsrc->task);
+      return;
     }
   }
 
@@ -638,7 +639,8 @@ gst_videotestsrc_loop (GstPad * pad)
     GST_ELEMENT_ERROR (videotestsrc, CORE, NEGOTIATION, (NULL),
         ("format wasn't negotiated before get function"));
     gst_pad_push_event (pad, gst_event_new (GST_EVENT_EOS));
-    return FALSE;
+    gst_task_pause (videotestsrc->task);
+    return;
   }
 
   if (videotestsrc->need_discont) {
@@ -656,13 +658,15 @@ gst_videotestsrc_loop (GstPad * pad)
       gst_pad_push_event (pad, gst_event_new (GST_EVENT_SEGMENT_DONE));
     } else {
       gst_pad_push_event (pad, gst_event_new (GST_EVENT_EOS));
-      return FALSE;
+      gst_task_pause (videotestsrc->task);
+      return;
     }
   }
 
   if (videotestsrc->num_buffers_left == 0) {
     gst_pad_push_event (pad, gst_event_new (GST_EVENT_EOS));
-    return FALSE;
+    gst_task_pause (videotestsrc->task);
+    return;
   } else {
     if (videotestsrc->num_buffers_left > 0)
       videotestsrc->num_buffers_left--;
@@ -670,7 +674,7 @@ gst_videotestsrc_loop (GstPad * pad)
 
   newsize = gst_videotestsrc_get_size (videotestsrc, videotestsrc->width,
       videotestsrc->height);
-  g_return_val_if_fail (newsize > 0, GST_FLOW_ERROR);
+  g_return_if_fail (newsize > 0);
 
   GST_LOG_OBJECT (videotestsrc, "creating buffer of %ld bytes for %dx%d image",
       newsize, videotestsrc->width, videotestsrc->height);
@@ -684,7 +688,8 @@ gst_videotestsrc_loop (GstPad * pad)
       GST_ELEMENT_ERROR (videotestsrc, CORE, NEGOTIATION, (NULL),
           ("format wasn't accepted"));
       gst_pad_push_event (pad, gst_event_new (GST_EVENT_EOS));
-      return FALSE;
+      gst_task_pause (videotestsrc->task);
+      return;
     }
   }
 
@@ -704,8 +709,6 @@ gst_videotestsrc_loop (GstPad * pad)
   videotestsrc->running_time += GST_BUFFER_DURATION (outbuf);
 
   gst_pad_push (pad, outbuf);
-
-  return TRUE;
 }
 
 static void

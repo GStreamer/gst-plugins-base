@@ -793,7 +793,7 @@ static gint gst_ogg_demux_read_end_chain (GstOggDemux * ogg,
     GstOggChain * chain);
 
 static gboolean gst_ogg_demux_handle_event (GstPad * pad, GstEvent * event);
-static gboolean gst_ogg_demux_loop (GstOggPad * pad);
+static void gst_ogg_demux_loop (GstOggPad * pad);
 static GstFlowReturn gst_ogg_demux_chain (GstPad * pad, GstBuffer * buffer);
 static gboolean gst_ogg_demux_sink_activate (GstPad * sinkpad,
     GstActivateMode mode);
@@ -1663,7 +1663,7 @@ gst_ogg_demux_chain (GstPad * pad, GstBuffer * buffer)
  * - when seeking, we can use the chain info to perform the
  *   seek.
  */
-static gboolean
+static void
 gst_ogg_demux_loop (GstOggPad * pad)
 {
   GstOggDemux *ogg;
@@ -1681,35 +1681,40 @@ gst_ogg_demux_loop (GstOggPad * pad)
 
   GST_LOG_OBJECT (ogg, "pull data %lld", ogg->offset);
   if (ogg->offset == ogg->length)
-    goto error;
+    goto stop;
 
   ret = gst_pad_pull_range (ogg->sinkpad, ogg->offset, CHUNKSIZE, &buffer);
   if (ret != GST_FLOW_OK) {
     GST_LOG_OBJECT (ogg, "got error %d", ret);
-    goto error;
+    goto stop;
   }
 
   ogg->offset += GST_BUFFER_SIZE (buffer);
 
   ret = gst_ogg_demux_chain_unlocked (ogg->sinkpad, buffer);
   if (ret == GST_FLOW_UNEXPECTED) {
-    gst_task_pause (GST_RPAD_TASK (ogg->sinkpad));
-    GST_LOG_OBJECT (ogg, "got unexpected %d", ret);
-    goto done;
+    GST_LOG_OBJECT (ogg, "got unexpected %d, pausing", ret);
+    goto pause;
   }
   if (ret != GST_FLOW_OK) {
     GST_LOG_OBJECT (ogg, "got error %d", ret);
-    goto error;
+    goto stop;
   }
-done:
-  GST_STREAM_UNLOCK (pad);
-
-  return TRUE;
-
-error:
 
   GST_STREAM_UNLOCK (pad);
-  return FALSE;
+  return;
+
+pause:
+  GST_LOG_OBJECT (ogg, "pausing task");
+  gst_task_pause (GST_RPAD_TASK (ogg->sinkpad));
+  GST_STREAM_UNLOCK (pad);
+  return;
+
+stop:
+  GST_LOG_OBJECT (ogg, "stopping task");
+  gst_task_stop (GST_RPAD_TASK (ogg->sinkpad));
+  GST_STREAM_UNLOCK (pad);
+  return;
 }
 
 static gboolean
