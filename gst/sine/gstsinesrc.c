@@ -237,6 +237,10 @@ gst_sinesrc_get (GstPad *pad)
    
   while(GST_DPMAN_PROCESS(src->dpman, i)) {
 
+    src->accumulator += 2*M_PI*src->samplerate / src->freq;
+    if(src->accumulator >= 2*M_PI) src->accumulator -= 2*M_PI;
+
+#if 0
     src->table_lookup = (gint)(src->table_pos);
     src->table_lookup_next = src->table_lookup + 1;
     src->table_interp = src->table_pos - src->table_lookup;
@@ -263,6 +267,9 @@ gst_sinesrc_get (GstPad *pad)
                     )
                   )+src->table_data[src->table_lookup]
                  )* src->volume * 32767.0;
+#endif
+
+    samples[i] = sin(src->accumulator) * src->volume * 32767.0;
     i++;
   }
 

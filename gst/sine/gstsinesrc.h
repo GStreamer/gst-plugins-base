@@ -62,6 +62,7 @@ struct _GstSineSrc {
   gfloat freq;
   
   /* lookup table data */
+  gdouble accumulator;
   gfloat *table_data;
   gdouble table_pos;
   gdouble table_inc;
