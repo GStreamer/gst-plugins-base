@@ -61,8 +61,7 @@ gst_alsa_src_pad_factory (void)
 
   if (!template)
     template = gst_pad_template_new ("src", GST_PAD_SRC, GST_PAD_ALWAYS,
-                                     gst_alsa_caps (SND_PCM_FORMAT_UNKNOWN, -1, -1),
-                                     NULL);
+                                     gst_alsa_caps (SND_PCM_FORMAT_UNKNOWN, -1, -1));
 
   return template;
 }
@@ -73,8 +72,7 @@ gst_alsa_src_request_pad_factory (void)
 
   if (!template)
     template = gst_pad_template_new ("src", GST_PAD_SRC, GST_PAD_ALWAYS,
-                                     gst_alsa_caps (SND_PCM_FORMAT_UNKNOWN, -1, 1),
-                                     NULL);
+                                     gst_alsa_caps (SND_PCM_FORMAT_UNKNOWN, -1, 1));
 
   return template;
 }
@@ -241,18 +239,19 @@ gst_alsa_src_adjust_rate (gint rate, gboolean aggressive)
 static gboolean
 gst_alsa_src_set_caps (GstAlsaSrc *src, gboolean aggressive)
 {
-  GstCaps *all_caps, *caps, *walk;
+  GstCaps2 *all_caps, *caps;
+  GstStructure *structure, *walk;
   gint channels, min_channels, max_channels;
   gint rate, min_rate, max_rate;
   gint i, endian, width, depth;
   gboolean sign;
   GstAlsa *this = GST_ALSA (src);
 
-  all_caps = gst_alsa_get_caps (this->pad[0], NULL);
+  all_caps = gst_alsa_get_caps (this->pad[0]);
   if (all_caps == NULL) return FALSE;
   /* now intersect this with all caps of the peers... */
   for (i = 0; i < GST_ELEMENT (src)->numpads; i++) {
-    all_caps = gst_caps_intersect (all_caps, gst_pad_get_caps (this->pad[i]));
+    all_caps = gst_caps2_intersect (all_caps, gst_pad_get_caps (this->pad[i]));
     if (all_caps == NULL) {
       GST_DEBUG ("No compatible caps found in alsasrc (%s)", GST_ELEMENT_NAME (this));
       return FALSE;
@@ -260,38 +259,40 @@ gst_alsa_src_set_caps (GstAlsaSrc *src, gboolean aggressive)
   }
 
   /* construct caps */
-  caps = GST_CAPS_NEW ("alsasrc caps", "audio/x-raw-int",
-		       "endianness",  GST_PROPS_INT (G_BYTE_ORDER),
-		       "signed",      GST_PROPS_BOOLEAN (TRUE),
-		       "width",       GST_PROPS_INT (16),
-		       "depth",       GST_PROPS_INT (16),
-		       "rate",        GST_PROPS_INT (44100),
-		       "channels",    GST_PROPS_INT (1));
-  gst_caps_ref (caps);
-  gst_caps_sink (caps);
+  caps = gst_caps2_new_simple ("audio/x-raw-int",
+      NULL);
+  g_assert (gst_caps2_get_n_structures (caps) == 1);
+  structure = gst_caps2_get_nth_cap (caps, 0);
 
   /* now try to find the best match */
-  walk = all_caps;
-  while (walk) {
-    gst_caps_get (walk, "signed", &sign, "width", &width, "depth", &depth, NULL);
-    if (gst_caps_has_property (walk, "endianness")) {
-      gst_caps_get_int (walk, "endianness", &endian);
-    } else {
+  for (i = 0; i < gst_caps2_get_n_structures (all_caps); i++) {
+    walk = gst_caps2_get_nth_cap (all_caps, i);
+    if (!(gst_structure_get_int (walk, "signed", &sign) &&
+	  gst_structure_get_int (walk, "width", &sign) &&
+	  gst_structure_get_int (walk, "depth", &sign))) {
+      GST_ERROR_OBJECT (src, "couldn't parse my own format. Huh?");
+      continue;
+    }
+    if (!gst_structure_get_int (walk, "endianness", &endian)) {
       endian = G_BYTE_ORDER;
     }
-    gst_caps_set (caps, "endianness", GST_PROPS_INT (endian));
-    gst_caps_set (caps, "width", GST_PROPS_INT (width));
-    gst_caps_set (caps, "depth", GST_PROPS_INT (depth));
-    gst_caps_set (caps, "signed", GST_PROPS_BOOLEAN (sign));
+    gst_structure_set (structure, 
+	"endianness", G_TYPE_INT, endian,
+	"width",      G_TYPE_INT, width,
+	"depth",      G_TYPE_INT, depth,
+	"signed",     G_TYPE_BOOLEAN, sign,
+	NULL);
 
-    gst_props_entry_get_int_range (gst_props_get_entry (GST_CAPS_PROPERTIES (walk), "rate"), &min_rate, &max_rate);
-    gst_props_entry_get_int_range (gst_props_get_entry (GST_CAPS_PROPERTIES (walk), "channels"), &min_channels, &max_channels);
+    min_rate = gst_value_get_int_range_min (gst_structure_get_value (walk, "rate"));
+    max_rate = gst_value_get_int_range_max (gst_structure_get_value (walk, "rate"));
+    min_channels = gst_value_get_int_range_min (gst_structure_get_value (walk, "channels"));
+    max_channels = gst_value_get_int_range_max (gst_structure_get_value (walk, "channels"));
     for (rate = max_rate;; rate--) {
       if ((rate = gst_alsa_src_adjust_rate (rate, aggressive)) < min_rate)
 	break;
-      gst_caps_set (caps, "rate", GST_PROPS_INT (rate));
+      gst_structure_set (structure, "rate", G_TYPE_INT, rate, NULL);
       for (channels = aggressive ? max_channels : MIN (max_channels, 2); channels >= min_channels; channels--) {
-        gst_caps_set (caps, "channels", GST_PROPS_INT (channels));
+        gst_structure_set (structure, "channels", G_TYPE_INT, channels, NULL);
         GST_DEBUG ("trying new caps: %ssigned, endianness: %d, width %d, depth %d, channels %d, rate %d",
                    sign ? "" : "un", endian, width, depth, channels, rate);
         if (gst_pad_try_set_caps (this->pad[0], caps) != GST_PAD_LINK_REFUSED)
@@ -303,7 +304,6 @@ gst_alsa_src_set_caps (GstAlsaSrc *src, gboolean aggressive)
 	}
       }
     }
-    walk = GST_CAPS_NEXT (walk);
   }
 
   if (!aggressive)

@@ -174,10 +174,9 @@ GType gst_alsa_get_type (void);
 
 void			gst_alsa_set_eos	(GstAlsa *		this);
 GstPadLinkReturn	gst_alsa_link		(GstPad *		pad,
-						 GstCaps *		caps);
-GstCaps *		gst_alsa_get_caps	(GstPad *		pad,
-						 GstCaps *caps);
-GstCaps *		gst_alsa_caps		(snd_pcm_format_t	format,
+						 const GstCaps2 *	caps);
+GstCaps2 *		gst_alsa_get_caps	(GstPad *		pad);
+GstCaps2 *		gst_alsa_caps		(snd_pcm_format_t	format,
 						 gint			rate,
 						 gint			channels);
 
