@@ -630,7 +630,10 @@ gst_ogg_pad_submit_packet (GstOggPad * pad, ogg_packet * packet)
   if (pad->packetno == 0) {
     gst_ogg_pad_typefind (pad, packet);
   }
+#if 0
   if (ogg->state != OGG_STATE_STREAMING) {
+    GST_DEBUG_OBJECT (ogg, "%p collecting headers, state %d", pad, ogg->state);
+
     buf = gst_buffer_new_and_alloc (packet->bytes);
     memcpy (GST_BUFFER_DATA (buf), packet->packet, packet->bytes);
     gst_buffer_set_caps (buf, GST_PAD_CAPS (pad));
@@ -642,12 +645,17 @@ gst_ogg_pad_submit_packet (GstOggPad * pad, ogg_packet * packet)
 
     goto done;
   }
+#endif
 
   /* stream packet to peer plugin */
   if (pad->mode == GST_OGG_PAD_MODE_STREAMING) {
     buf =
         gst_pad_alloc_buffer (GST_PAD (pad), GST_BUFFER_OFFSET_NONE,
         packet->bytes, GST_PAD_CAPS (pad));
+
+    GST_DEBUG_OBJECT (ogg,
+        "%p streaming to peer serial %08lx, packetno %lld", pad, pad->serialno,
+        pad->packetno);
 
     if (pad->new_segment) {
       ret = gst_pad_push_event (GST_PAD (pad), pad->new_segment);
@@ -661,6 +669,10 @@ gst_ogg_pad_submit_packet (GstOggPad * pad, ogg_packet * packet)
       GST_BUFFER_OFFSET_END (buf) = packet->granulepos;
 
       ret = gst_pad_push (GST_PAD (pad), buf);
+    } else {
+      GST_DEBUG_OBJECT (ogg,
+          "%p could not get buffer from peer %08lx, packetno %lld", pad,
+          pad->serialno, pad->packetno);
     }
   } else {
     /* initialize our internal decoder with packets */
