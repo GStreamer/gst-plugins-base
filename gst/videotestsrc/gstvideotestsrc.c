@@ -20,32 +20,11 @@
 
 /*#define DEBUG_ENABLED */
 #include <gstvideotestsrc.h>
+#include <videotestsrc.h>
 
 #include <string.h>
 #include <stdlib.h>
 
-typedef struct paintinfo_struct paintinfo;
-struct paintinfo_struct
-{
-  unsigned char *dest;
-  unsigned char *yp, *up, *vp;
-  int width;
-  int height;
-  int Y, U, V;
-  void (*paint_hline) (paintinfo * p, int x, int y, int w);
-};
-
-struct fourcc_list_struct
-{
-  char *fourcc;
-  int bitspp;
-  void (*paint_setup) (paintinfo * p, char *dest);
-  void (*paint_hline) (paintinfo * p, int x, int y, int w);
-};
-static struct fourcc_list_struct fourcc_list[];
-static int n_fourccs;
-
-static int paintrect_find_fourcc (int find_fourcc);
 
 
 /* elementfactory information */
@@ -73,24 +52,16 @@ enum
   ARG_HEIGHT,
   ARG_FOURCC,
   ARG_RATE,
+  ARG_TYPE,
   /* FILL ME */
 };
-
-GST_PAD_TEMPLATE_FACTORY (videotestsrc_src_template_factory,
-			  "src",
-			  GST_PAD_SRC,
-			  GST_PAD_ALWAYS,
-			  GST_CAPS_NEW ("videotestsrc_src",
-					"video/raw",
-					"width", GST_PROPS_INT_RANGE (0, G_MAXINT),
-					"height", GST_PROPS_INT_RANGE (0, G_MAXINT)
-			  )
-  );
 
 static void gst_videotestsrc_class_init (GstVideotestsrcClass * klass);
 static void gst_videotestsrc_init (GstVideotestsrc * videotestsrc);
 static GstElementStateReturn gst_videotestsrc_change_state (GstElement * element);
+static void gst_videotestsrc_set_clock (GstElement *element, GstClock *clock);
 
+static void gst_videotestsrc_set_pattern (GstVideotestsrc *src, int pattern_type);
 static void gst_videotestsrc_set_property (GObject * object, guint prop_id,
 					   const GValue * value, GParamSpec * pspec);
 static void gst_videotestsrc_get_property (GObject * object, guint prop_id, GValue * value,
@@ -100,16 +71,27 @@ static GstBuffer *gst_videotestsrc_get (GstPad * pad);
 
 static GstElementClass *parent_class = NULL;
 
-static void gst_videotestsrc_setup (GstVideotestsrc * v);
-static void random_chars (unsigned char *dest, int nbytes);
-static void gst_videotestsrc_smpte_yuv (GstVideotestsrc * v, unsigned char *dest, int w, int h);
-static void gst_videotestsrc_smpte_RGB (GstVideotestsrc * v, unsigned char *dest, int w, int h);
-#if 0
-static void gst_videotestsrc_colors_yuv (GstVideotestsrc * v, unsigned char *dest, int w, int h);
-#endif
+static GstCaps * gst_videotestsrc_get_capslist (void);
 
 
-static GType
+static GstPadTemplate *
+videotestsrc_src_template_factory(void)
+{
+  static GstPadTemplate *templ = NULL;
+
+  if(!templ){
+    GstCaps *caps = GST_CAPS_NEW("src","video/raw",
+			"width", GST_PROPS_INT_RANGE (0, G_MAXINT),
+			"height", GST_PROPS_INT_RANGE (0, G_MAXINT));
+
+    caps = gst_caps_intersect(caps, gst_videotestsrc_get_capslist ());
+
+    templ = GST_PAD_TEMPLATE_NEW("src", GST_PAD_SRC, GST_PAD_ALWAYS, caps);
+  }
+  return templ;
+}
+
+GType
 gst_videotestsrc_get_type (void)
 {
   static GType videotestsrc_type = 0;
@@ -130,6 +112,25 @@ gst_videotestsrc_get_type (void)
       g_type_register_static (GST_TYPE_ELEMENT, "GstVideotestsrc", &videotestsrc_info, 0);
   }
   return videotestsrc_type;
+}
+
+#define GST_TYPE_VIDEOTESTSRC_PATTERN (gst_videotestsrc_pattern_get_type ())
+static GType
+gst_videotestsrc_pattern_get_type (void)
+{
+  static GType videotestsrc_pattern_type = 0;
+  static GEnumValue pattern_types[] = {
+    { GST_VIDEOTESTSRC_SMPTE, "smpte", "SMPTE 100% color bars" },
+    { GST_VIDEOTESTSRC_SNOW,  "snow",  "Random (television snow)" },
+    { GST_VIDEOTESTSRC_BLACK, "black", "0% Black" },
+    { 0, NULL, NULL },
+  };
+
+  if (!videotestsrc_pattern_type){
+    videotestsrc_pattern_type = g_enum_register_static("GstVideotestsrcPattern",
+		    pattern_types);
+  }
+  return videotestsrc_pattern_type;
 }
 
 static void
@@ -153,6 +154,9 @@ gst_videotestsrc_class_init (GstVideotestsrcClass * klass)
   g_object_class_install_property (G_OBJECT_CLASS (klass), ARG_RATE,
       g_param_spec_int ("rate", "Rate", "Frame rate",
         1, 100, 30, G_PARAM_READWRITE));
+  g_object_class_install_property (G_OBJECT_CLASS (klass), ARG_TYPE,
+      g_param_spec_enum ("pattern", "Pattern", "Type of test pattern to generate",
+        GST_TYPE_VIDEOTESTSRC_PATTERN, 1, G_PARAM_READWRITE));
 
   parent_class = g_type_class_ref (GST_TYPE_ELEMENT);
 
@@ -160,6 +164,21 @@ gst_videotestsrc_class_init (GstVideotestsrcClass * klass)
   gobject_class->get_property = gst_videotestsrc_get_property;
 
   gstelement_class->change_state = gst_videotestsrc_change_state;
+  gstelement_class->set_clock    = gst_videotestsrc_set_clock;
+}
+
+static void
+gst_videotestsrc_set_clock (GstElement *element, GstClock *clock)
+{
+  GstVideotestsrc *v;
+
+  v = GST_VIDEOTESTSRC (element);
+
+#if GST_VERSION_MINOR > 6
+  gst_object_replace ((GstObject **)&v->clock, (GstObject *)clock);
+#else
+  gst_object_swap ((GstObject **)&v->clock, (GstObject *)clock);
+#endif
 }
 
 static GstPadLinkReturn
@@ -170,38 +189,18 @@ gst_videotestsrc_srcconnect (GstPad * pad, GstCaps * caps)
   GST_DEBUG (0, "gst_videotestsrc_srcconnect");
   videotestsrc = GST_VIDEOTESTSRC (gst_pad_get_parent (pad));
 
-#if 0
-  if (!GST_CAPS_IS_FIXED (caps)) {
+  videotestsrc->fourcc = paintinfo_find_by_caps(caps);
+  if(!videotestsrc->fourcc){
     return GST_PAD_LINK_DELAYED;
   }
-#endif
 
-  gst_caps_get_fourcc_int (caps, "format", &videotestsrc->format);
+  GST_DEBUG (0,"videotestsrc: using fourcc element %p %s\n",
+	videotestsrc->fourcc, videotestsrc->fourcc->name);
+
   gst_caps_get_int (caps, "width", &videotestsrc->width);
   gst_caps_get_int (caps, "height", &videotestsrc->height);
 
-  GST_DEBUG (0, "format is 0x%08x\n", videotestsrc->format);
-
-  printf ("videotestsrc: caps FOURCC 0x%08x, forced FOURCC 0x%08x\n",
-	  videotestsrc->format, videotestsrc->forced_format);
-
-  if (videotestsrc->forced_format && videotestsrc->format != videotestsrc->forced_format) {
-    return GST_PAD_LINK_REFUSED;
-  }
-
-  printf ("videotestsrc: using FOURCC 0x%08x\n", videotestsrc->format);
-
-  if (videotestsrc->format == GST_MAKE_FOURCC ('R', 'G', 'B', ' ')) {
-    videotestsrc->make_image = gst_videotestsrc_smpte_RGB;
-    videotestsrc->bpp = 16;
-  } else {
-    int index;
-
-    index = paintrect_find_fourcc (videotestsrc->format);
-    videotestsrc->make_image = gst_videotestsrc_smpte_yuv;
-    /* videotestsrc->make_image = gst_videotestsrc_colors_yuv; */
-    videotestsrc->bpp = fourcc_list[index].bitspp;
-  }
+  videotestsrc->bpp = videotestsrc->fourcc->bitspp;
 
   GST_DEBUG (0, "size %d x %d", videotestsrc->width, videotestsrc->height);
 
@@ -237,30 +236,11 @@ gst_videotestsrc_get_capslist (void)
   int i;
 
   if (capslist)
-  {
-    GST_DEBUG (GST_CAT_CAPS, "static caps refcount: %d", capslist->refcount);
-    if (capslist->refcount > 0)
-      return capslist;
-    else
-    {
-      capslist = NULL;
-      /* FIXME: this indicates a refcounting bug somewhere */
-      g_print ("warning: videotestsrc: caplist refcount dropped to 0 !\n");
-    }
-}
+    return capslist;
 
-  GST_DEBUG (GST_CAT_CAPS, "initialising videotestsrc capslist");
-  for (i = 0; i < n_fourccs; i++) {
-    char *s = fourcc_list[i].fourcc;
-    int fourcc = GST_MAKE_FOURCC (s[0], s[1], s[2], s[3]);
-
-    caps = GST_CAPS_NEW ("videotestsrc_filter",
-			 "video/raw",
-			 "format", GST_PROPS_FOURCC (fourcc),
-			 "width", GST_PROPS_INT (640),
-			 "height", GST_PROPS_INT (480));
-    GST_DEBUG (GST_CAT_CAPS, "new caps refcount: %d", caps->refcount);
-    capslist = gst_caps_append (capslist, caps);
+  for(i=0;i<n_fourccs;i++){
+    caps = paint_get_caps(fourcc_list + i);
+    capslist = gst_caps_append(capslist, caps);
   }
 
   return capslist;
@@ -270,20 +250,31 @@ static GstCaps *
 gst_videotestsrc_getcaps (GstPad * pad, GstCaps * caps)
 {
   GstVideotestsrc *vts;
+  GstCaps *caps1;
+  GstCaps *caps2;
 
   vts = GST_VIDEOTESTSRC (gst_pad_get_parent (pad));
 
-  if (vts->forced_format != 0) {
-    GstCaps *caps;
-    caps = GST_CAPS_NEW ("videotestsrc_filter",
-			 "video/raw",
-			 "format", GST_PROPS_FOURCC (vts->forced_format),
-			 "width", GST_PROPS_INT (640),
-			 "height", GST_PROPS_INT (480));
+  if (vts->forced_format != NULL) {
+    struct fourcc_list_struct *fourcc;
+    fourcc = paintrect_find_name (vts->forced_format);
+    caps1 = paint_get_caps(fourcc);
   } else {
-    GST_DEBUG (GST_CAT_CAPS, "reffing and returning capslist");
-    return gst_caps_ref (gst_videotestsrc_get_capslist ());
+    caps1 = gst_videotestsrc_get_capslist ();
   }
+
+  if(vts->width){
+    caps2 = GST_CAPS_NEW("ack","video/raw",
+		"width",GST_PROPS_INT(vts->width),
+		"height",GST_PROPS_INT(vts->height));
+  }else{
+    caps2 = GST_CAPS_NEW("ack","video/raw",
+		"width",GST_PROPS_INT_RANGE(16,4096),
+		"height",GST_PROPS_INT_RANGE(16,4096));
+  }
+
+  /* ref intersection and return it */
+  return gst_caps_ref (gst_caps_intersect(caps1,caps2));
 }
 
 static void
@@ -293,7 +284,6 @@ gst_videotestsrc_init (GstVideotestsrc * videotestsrc)
 
   videotestsrc->srcpad =
     gst_pad_new_from_template (GST_PAD_TEMPLATE_GET (videotestsrc_src_template_factory), "src");
-  /*gst_pad_set_negotiate_function(videotestsrc->srcpad,videotestsrc_negotiate_src); */
   gst_pad_set_getcaps_function (videotestsrc->srcpad, gst_videotestsrc_getcaps);
   gst_element_add_pad (GST_ELEMENT (videotestsrc), videotestsrc->srcpad);
   gst_pad_set_get_function (videotestsrc->srcpad, gst_videotestsrc_get);
@@ -307,6 +297,7 @@ gst_videotestsrc_init (GstVideotestsrc * videotestsrc)
   videotestsrc->interval = GST_SECOND / videotestsrc->rate;
 
   videotestsrc->pool = NULL;
+  gst_videotestsrc_set_pattern(videotestsrc, GST_VIDEOTESTSRC_SMPTE);
 }
 
 
@@ -316,6 +307,7 @@ gst_videotestsrc_get (GstPad * pad)
   GstVideotestsrc *videotestsrc;
   gulong newsize;
   GstBuffer *buf;
+  GstClockTimeDiff jitter = 0;
 
   GST_DEBUG (0, "gst_videotestsrc_get");
 
@@ -325,19 +317,18 @@ gst_videotestsrc_get (GstPad * pad)
   videotestsrc = GST_VIDEOTESTSRC (gst_pad_get_parent (pad));
 
   newsize = (videotestsrc->width * videotestsrc->height * videotestsrc->bpp) >> 3;
+
   GST_DEBUG (0, "size=%ld %dx%d", newsize, videotestsrc->width, videotestsrc->height);
 
   buf = NULL;
   if (videotestsrc->pool) {
-    buf = gst_buffer_new_from_pool (videotestsrc->pool, 0, newsize);
+    buf = gst_buffer_new_from_pool (videotestsrc->pool, 0, 0);
     /* if the buffer we get is too small, make our own */
-    if (GST_BUFFER_SIZE (buf) < newsize)
-    {
+    if (buf && GST_BUFFER_SIZE (buf) < newsize){
       gst_buffer_unref (buf);
       buf = NULL;
     }
   }
-  
   if (!buf) {
     buf = gst_buffer_new ();
     GST_BUFFER_SIZE (buf) = newsize;
@@ -345,14 +336,45 @@ gst_videotestsrc_get (GstPad * pad)
   }
   g_return_val_if_fail (GST_BUFFER_DATA (buf) != NULL, NULL);
 
-  videotestsrc->timestamp += videotestsrc->interval;
-  GST_BUFFER_TIMESTAMP (buf) = videotestsrc->timestamp;
-
-  g_assert (GST_IS_VIDEOTESTSRC (videotestsrc));
   videotestsrc->make_image (videotestsrc, (void *) GST_BUFFER_DATA (buf),
 			    videotestsrc->width, videotestsrc->height);
+  
+  do {
+    GstClockID id;
+
+    videotestsrc->timestamp += videotestsrc->interval;
+    GST_BUFFER_TIMESTAMP (buf) = videotestsrc->timestamp;
+
+    if (videotestsrc->clock) {
+      id = gst_clock_new_single_shot_id (videotestsrc->clock, GST_BUFFER_TIMESTAMP (buf));
+      gst_element_clock_wait (GST_ELEMENT (videotestsrc), id, &jitter);
+      gst_clock_id_free (id);
+    }
+  }
+  while (jitter > 100 * GST_MSECOND);
 
   return buf;
+}
+
+static void
+gst_videotestsrc_set_pattern (GstVideotestsrc *src, int pattern_type)
+{
+  src->type = pattern_type;
+
+  GST_DEBUG (0,"setting pattern to %d\n",pattern_type);
+  switch(pattern_type){
+    case GST_VIDEOTESTSRC_SMPTE:
+      src->make_image = gst_videotestsrc_smpte;
+      break;
+    case GST_VIDEOTESTSRC_SNOW:
+      src->make_image = gst_videotestsrc_snow;
+      break;
+    case GST_VIDEOTESTSRC_BLACK:
+      src->make_image = gst_videotestsrc_black;
+      break;
+    default:
+      g_assert_not_reached();
+  }
 }
 
 static void
@@ -360,7 +382,7 @@ gst_videotestsrc_set_property (GObject * object, guint prop_id, const GValue * v
 			       GParamSpec * pspec)
 {
   GstVideotestsrc *src;
-  const gchar *s;
+  const char *format;
 
   /* it's not null if we got it, but it might not be ours */
   g_return_if_fail (GST_IS_VIDEOTESTSRC (object));
@@ -375,16 +397,20 @@ gst_videotestsrc_set_property (GObject * object, guint prop_id, const GValue * v
       src->height = g_value_get_int (value);
       break;
     case ARG_FOURCC:
-      /* FIXME */
-      s = g_value_get_string (value);
-      if (strlen (s) == 4) {
-	src->forced_format = GST_MAKE_FOURCC (s[0], s[1], s[2], s[3]);
-	printf ("forcing FOURCC to 0x%08x\n", src->forced_format);
+      format = g_value_get_string (value);
+      if(paintrect_find_name (format) != NULL){
+        src->forced_format = g_strdup(format);
+        GST_DEBUG (0,"forcing format to \"%s\"\n", format);
+      }else{
+        GST_DEBUG (0,"unknown format \"%s\"\n", format);
       }
       break;
     case ARG_RATE:
       src->rate = g_value_get_int (value);
       src->interval = GST_SECOND/src->rate;
+      break;
+    case ARG_TYPE:
+      gst_videotestsrc_set_pattern (src, g_value_get_enum (value));
       break;
     default:
       break;
@@ -408,10 +434,13 @@ gst_videotestsrc_get_property (GObject * object, guint prop_id, GValue * value, 
       g_value_set_int (value, src->height);
       break;
     case ARG_FOURCC:
-      /* g_value_set_int (value, src->forced_format); */
+      g_value_set_string (value, src->forced_format);
       break;
     case ARG_RATE:
       g_value_set_int (value, src->rate);
+      break;
+    case ARG_TYPE:
+      g_value_set_enum (value, src->type);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -445,631 +474,4 @@ GstPluginDesc plugin_desc = {
 };
 
 
-
-/* Non-GST specific stuff */
-
-static void
-gst_videotestsrc_setup (GstVideotestsrc * v)
-{
-
-}
-
-static unsigned char
-random_char (void)
-{
-  static unsigned int state;
-
-  state *= 1103515245;
-  state += 12345;
-  return (state >> 16);
-}
-
-static void
-random_chars (unsigned char *dest, int nbytes)
-{
-  int i;
-  static unsigned int state;
-
-  for (i = 0; i < nbytes; i++) {
-    state *= 1103515245;
-    state += 12345;
-    dest[i] = (state >> 16);
-  }
-}
-
-static void
-memset_str2 (unsigned char *dest, unsigned char val, int n)
-{
-  int i;
-
-  for (i = 0; i < n; i++) {
-    *dest = val;
-    dest += 2;
-  }
-}
-
-static void
-memset_str3 (unsigned char *dest, unsigned char val, int n)
-{
-  int i;
-
-  for (i = 0; i < n; i++) {
-    *dest = val;
-    dest += 3;
-  }
-}
-
-static void
-memset_str4 (unsigned char *dest, unsigned char val, int n)
-{
-  int i;
-
-  for (i = 0; i < n; i++) {
-    *dest = val;
-    dest += 4;
-  }
-}
-
-static void
-paint_rect_random (unsigned char *dest, int stride, int x, int y, int w, int h)
-{
-  unsigned char *d = dest + stride * y + x;
-  int i;
-
-  for (i = 0; i < h; i++) {
-    random_chars (d, w);
-    d += stride;
-  }
-}
-
-#if 0
-static void
-paint_rect (unsigned char *dest, int stride, int x, int y, int w, int h, unsigned char color)
-{
-  unsigned char *d = dest + stride * y + x;
-  int i;
-
-  for (i = 0; i < h; i++) {
-    memset (d, color, w);
-    d += stride;
-  }
-}
-#endif
-
-static void
-paint_rect_s2 (unsigned char *dest, int stride, int x, int y, int w, int h, unsigned char col)
-{
-  unsigned char *d = dest + stride * y + x * 2;
-  unsigned char *dp;
-  int i, j;
-
-  for (i = 0; i < h; i++) {
-    dp = d;
-    for (j = 0; j < w; j++) {
-      *dp = col;
-      dp += 2;
-    }
-    d += stride;
-  }
-}
-
-static void
-paint_rect2 (unsigned char *dest, int stride, int x, int y, int w, int h, unsigned char *col)
-{
-  unsigned char *d = dest + stride * y + x * 2;
-  unsigned char *dp;
-  int i, j;
-
-  for (i = 0; i < h; i++) {
-    dp = d;
-    for (j = 0; j < w; j++) {
-      *dp++ = col[0];
-      *dp++ = col[1];
-    }
-    d += stride;
-  }
-}
-static void
-paint_rect3 (unsigned char *dest, int stride, int x, int y, int w, int h, unsigned char *col)
-{
-  unsigned char *d = dest + stride * y + x * 3;
-  unsigned char *dp;
-  int i, j;
-
-  for (i = 0; i < h; i++) {
-    dp = d;
-    for (j = 0; j < w; j++) {
-      *dp++ = col[0];
-      *dp++ = col[1];
-      *dp++ = col[2];
-    }
-    d += stride;
-  }
-}
-
-static void
-paint_rect_s4 (unsigned char *dest, int stride, int x, int y, int w, int h, unsigned char col)
-{
-  unsigned char *d = dest + stride * y + x * 4;
-  unsigned char *dp;
-  int i, j;
-
-  for (i = 0; i < h; i++) {
-    dp = d;
-    for (j = 0; j < w; j++) {
-      *dp = col;
-      dp += 4;
-    }
-    d += stride;
-  }
-}
-
-enum {
-	COLOR_WHITE = 0,
-	COLOR_YELLOW,
-	COLOR_CYAN,
-	COLOR_GREEN,
-	COLOR_MAGENTA,
-	COLOR_RED,
-	COLOR_BLUE,
-	COLOR_BLACK,
-	COLOR_NEG_I,
-	COLOR_POS_Q,
-	COLOR_SUPER_BLACK,
-	COLOR_DARK_GREY,
-};
-
-/*                        wht  yel  cya  grn  mag  red  blu  blk   -I    Q, superblack, dark grey */
-static int y_colors[] = { 255, 226, 179, 150, 105, 76, 29, 16, 16, 16, 0, 32 };
-static int u_colors[] = { 128, 0, 170, 46, 212, 85, 255, 128, 198, 235, 128, 128 };
-static int v_colors[] = { 128, 155, 0, 21, 235, 255, 107, 128, 21, 198, 128, 128 };
-
-static void paint_setup_I420 (paintinfo * p, char *dest);
-static void paint_setup_YV12 (paintinfo * p, char *dest);
-static void paint_setup_YUY2 (paintinfo * p, char *dest);
-static void paint_setup_UYVY (paintinfo * p, char *dest);
-static void paint_setup_YVYU (paintinfo * p, char *dest);
-static void paint_setup_Y800 (paintinfo * p, char *dest);
-static void paint_setup_IMC1 (paintinfo * p, char *dest);
-static void paint_setup_IMC2 (paintinfo * p, char *dest);
-static void paint_setup_IMC3 (paintinfo * p, char *dest);
-static void paint_setup_IMC4 (paintinfo * p, char *dest);
-
-static void paint_hline_I420 (paintinfo * p, int x, int y, int w);
-static void paint_hline_YUY2 (paintinfo * p, int x, int y, int w);
-static void paint_hline_Y800 (paintinfo * p, int x, int y, int w);
-static void paint_hline_IMC1 (paintinfo * p, int x, int y, int w);
-
-static struct fourcc_list_struct fourcc_list[] = {
-/* packed */
-  {"YUY2", 16, paint_setup_YUY2, paint_hline_YUY2},
-  {"UYVY", 16, paint_setup_UYVY, paint_hline_YUY2},
-  {"Y422", 16, paint_setup_UYVY, paint_hline_YUY2},
-  {"UYNV", 16, paint_setup_UYVY, paint_hline_YUY2},
-  {"YVYU", 16, paint_setup_YVYU, paint_hline_YUY2},
-
-  /* interlaced */
-  /*{ "IUYV", 16, paint_setup_YVYU, paint_hline_YUY2 }, */
-
-  /* inverted */
-  /*{ "cyuv", 16, paint_setup_YVYU, paint_hline_YUY2 }, */
-
-  /*{ "Y41P", 12, paint_setup_YVYU, paint_hline_YUY2 }, */
-
-  /* interlaced */
-  /*{ "IY41", 12, paint_setup_YVYU, paint_hline_YUY2 }, */
-
-  /*{ "Y211", 8, paint_setup_YVYU, paint_hline_YUY2 }, */
-
-  /*{ "Y41T", 12, paint_setup_YVYU, paint_hline_YUY2 }, */
-  /*{ "Y42P", 16, paint_setup_YVYU, paint_hline_YUY2 }, */
-  /*{ "CLJR", 8, paint_setup_YVYU, paint_hline_YUY2 }, */
-  /*{ "IYU1", 12, paint_setup_YVYU, paint_hline_YUY2 }, */
-  /*{ "IYU2", 24, paint_setup_YVYU, paint_hline_YUY2 }, */
-
-/* planar */
-  /* YVU9 */
-  /* YUV9 */
-  /* IF09 */
-  /* YV12 */
-  {"YV12", 12, paint_setup_YV12, paint_hline_I420},
-  /* I420 */
-  {"I420", 12, paint_setup_I420, paint_hline_I420},
-  /* IYUV (same as I420) */
-  {"IYUV", 12, paint_setup_I420, paint_hline_I420},
-  /* NV12 */
-  /* NV21 */
-  /* IMC1 */
-  {"IMC1", 16, paint_setup_IMC1, paint_hline_IMC1},
-  /* IMC2 */
-  {"IMC2", 12, paint_setup_IMC2, paint_hline_IMC1},
-  /* IMC3 */
-  {"IMC3", 16, paint_setup_IMC3, paint_hline_IMC1},
-  /* IMC4 */
-  {"IMC4", 12, paint_setup_IMC4, paint_hline_IMC1},
-  /* CLPL */
-  /* Y41B */
-  /* Y42B */
-  /* Y800 grayscale */
-  {"Y800", 8, paint_setup_Y800, paint_hline_Y800},
-  /* Y8   same as Y800 */
-  {"Y8  ", 8, paint_setup_Y800, paint_hline_Y800},
-
-  /*{ "IYU2", 24, paint_setup_YVYU, paint_hline_YUY2 }, */
-};
-static int n_fourccs = sizeof (fourcc_list) / sizeof (fourcc_list[0]);
-
-static int
-paintrect_find_fourcc (int find_fourcc)
-{
-  int i;
-
-  for (i = 0; i < n_fourccs; i++) {
-    char *s;
-    int fourcc;
-
-    s = fourcc_list[i].fourcc;
-    fourcc = GST_MAKE_FOURCC (s[0], s[1], s[2], s[3]);
-    if (find_fourcc == fourcc) {
-      return i;
-    }
-  }
-  return -1;
-}
-
-static void
-gst_videotestsrc_smpte_yuv (GstVideotestsrc * v, unsigned char *dest, int w, int h)
-{
-  int index;
-  int i;
-  int y1, y2;
-  int j;
-  paintinfo pi;
-  paintinfo *p = &pi;
-
-  g_assert (GST_IS_VIDEOTESTSRC (v));
-  p->width = w;
-  p->height = h;
-  index = paintrect_find_fourcc (v->format);
-  if (index < 0)
-    return;
-
-  fourcc_list[index].paint_setup (p, dest);
-  p->paint_hline = fourcc_list[index].paint_hline;
-
-  y1 = 2 * h / 3;
-  y2 = h * 0.75;
-
-  /* color bars */
-  for (i = 0; i < 7; i++) {
-    int x1 = i * w / 7;
-    int x2 = (i + 1) * w / 7;
-
-    p->Y = y_colors[i];
-    p->U = u_colors[i];
-    p->V = v_colors[i];
-    for (j = 0; j < y1; j++) {
-      p->paint_hline (p, x1, j, (x2 - x1));
-    }
-  }
-
-  /* inverse blue bars */
-  for (i = 0; i < 7; i++) {
-    int x1 = i * w / 7;
-    int x2 = (i + 1) * w / 7;
-    int k;
-
-    if (i & 1) {
-      k = 7;
-    } else {
-      k = 6 - i;
-    }
-    p->Y = y_colors[k];
-    p->U = u_colors[k];
-    p->V = v_colors[k];
-    for (j = y1; j < y2; j++) {
-      p->paint_hline (p, x1, j, (x2 - x1));
-    }
-  }
-
-  /* -I, white, Q regions */
-  for (i = 0; i < 3; i++) {
-    int x1 = i * w / 6;
-    int x2 = (i + 1) * w / 6;
-    int k;
-
-    if (i == 0) {
-      k = 8;
-    } else if (i == 1) {
-      k = 0;
-    } else
-      k = 9;
-
-    p->Y = y_colors[k];
-    p->U = u_colors[k];
-    p->V = v_colors[k];
-
-    for (j = y2; j < h; j++) {
-      p->paint_hline (p, x1, j, (x2 - x1));
-    }
-  }
-
-  /* superblack, black, dark grey */
-  for (i = 0; i < 3; i++) {
-    int x1 = w/2 + i * w / 12;
-    int x2 = w/2 + (i + 1) * w / 12;
-    int k;
-
-    if (i == 0) {
-      k = COLOR_SUPER_BLACK;
-    } else if (i == 1) {
-      k = COLOR_BLACK;
-    } else
-      k = COLOR_DARK_GREY;
-
-    p->Y = y_colors[k];
-    p->U = u_colors[k];
-    p->V = v_colors[k];
-
-    for (j = y2; j < h; j++) {
-      p->paint_hline (p, x1, j, (x2 - x1));
-    }
-  }
-
-  {
-    int x1 = w*3 / 4;
-
-    p->U = u_colors[0];
-    p->V = v_colors[0];
-
-    for (i = x1; i < w; i++) {
-      for (j = y2; j < h; j++) {
-	p->Y = random_char ();
-	p->paint_hline (p, i, j, 1);
-      }
-    }
-
-  }
-}
-
-static void
-paint_setup_I420 (paintinfo * p, char *dest)
-{
-  p->yp = dest;
-  p->up = dest + p->width * p->height;
-  p->vp = dest + p->width * p->height + p->width * p->height / 4;
-}
-
-static void
-paint_hline_I420 (paintinfo * p, int x, int y, int w)
-{
-  int x1 = x / 2;
-  int x2 = (x + w) / 2;
-  int offset = y * p->width;
-  int offset1 = (y / 2) * (p->width / 2);
-
-  memset (p->yp + offset + x, p->Y, w);
-  memset (p->up + offset1 + x1, p->U, x2 - x1);
-  memset (p->vp + offset1 + x1, p->V, x2 - x1);
-}
-
-static void
-paint_setup_YV12 (paintinfo * p, char *dest)
-{
-  p->yp = dest;
-  p->up = dest + p->width * p->height + p->width * p->height / 4;
-  p->vp = dest + p->width * p->height;
-}
-
-static void
-paint_setup_YUY2 (paintinfo * p, char *dest)
-{
-  p->yp = dest;
-  p->up = dest + 1;
-  p->vp = dest + 3;
-}
-
-static void
-paint_setup_UYVY (paintinfo * p, char *dest)
-{
-  p->yp = dest + 1;
-  p->up = dest;
-  p->vp = dest + 2;
-}
-
-static void
-paint_setup_YVYU (paintinfo * p, char *dest)
-{
-  p->yp = dest;
-  p->up = dest + 3;
-  p->vp = dest + 1;
-}
-
-static void
-paint_hline_YUY2 (paintinfo * p, int x, int y, int w)
-{
-  int x1 = x / 2;
-  int x2 = (x + w) / 2;
-  int offset;
-
-  offset = y * p->width * 2;
-  memset_str2 (p->yp + offset + x * 2, p->Y, w);
-  memset_str4 (p->up + offset + x1 * 4, p->U, x2 - x1);
-  memset_str4 (p->vp + offset + x1 * 4, p->V, x2 - x1);
-}
-
-static void
-paint_setup_Y800 (paintinfo * p, char *dest)
-{
-  p->yp = dest;
-}
-
-static void
-paint_hline_Y800 (paintinfo * p, int x, int y, int w)
-{
-  int offset = y * p->width;
-
-  memset (p->yp + offset + x, p->Y, w);
-}
-
-static void
-paint_setup_IMC1 (paintinfo * p, char *dest)
-{
-  p->yp = dest;
-  p->up = dest + p->width * p->height;
-  p->vp = dest + p->width * p->height + p->width * p->height / 2;
-}
-
-static void
-paint_setup_IMC2 (paintinfo * p, char *dest)
-{
-  p->yp = dest;
-  p->vp = dest + p->width * p->height;
-  p->up = dest + p->width * p->height + p->width / 2;
-}
-
-static void
-paint_setup_IMC3 (paintinfo * p, char *dest)
-{
-  p->yp = dest;
-  p->up = dest + p->width * p->height + p->width * p->height / 2;
-  p->vp = dest + p->width * p->height;
-}
-
-static void
-paint_setup_IMC4 (paintinfo * p, char *dest)
-{
-  p->yp = dest;
-  p->vp = dest + p->width * p->height + p->width / 2;
-  p->up = dest + p->width * p->height;
-}
-
-static void
-paint_hline_IMC1 (paintinfo * p, int x, int y, int w)
-{
-  int x1 = x / 2;
-  int x2 = (x + w) / 2;
-  int offset = y * p->width;
-  int offset1 = (y / 2) * p->width;
-
-  memset (p->yp + offset + x, p->Y, w);
-  memset (p->up + offset1 + x1, p->U, x2 - x1);
-  memset (p->vp + offset1 + x1, p->V, x2 - x1);
-}
-
-
-
-/*                        wht  yel  cya  grn  mag  red  blu  blk   -I    Q */
-static int r_colors[] = { 255, 255, 0, 0, 255, 255, 0, 0, 0, 0 };
-static int g_colors[] = { 255, 255, 255, 255, 0, 0, 0, 0, 0, 128 };
-static int b_colors[] = { 255, 0, 255, 0, 255, 0, 255, 0, 128, 255 };
-
-static void
-gst_videotestsrc_smpte_RGB (GstVideotestsrc * v, unsigned char *dest, int w, int h)
-{
-  int i;
-  int y1, y2;
-
-  y1 = h * 2 / 3;
-  y2 = h * 0.75;
-
-  /* color bars */
-  for (i = 0; i < 7; i++) {
-    int x1 = i * w / 7;
-    int x2 = (i + 1) * w / 7;
-    unsigned char col[2];
-
-    col[0] = (g_colors[i] & 0xe0) | (b_colors[i] >> 3);
-    col[1] = (r_colors[i] & 0xf8) | (g_colors[i] >> 5);
-    paint_rect2 (dest, w * 2, x1, 0, x2 - x1, y1, col);
-  }
-
-  /* inverse blue bars */
-  for (i = 0; i < 7; i++) {
-    int x1 = i * w / 7;
-    int x2 = (i + 1) * w / 7;
-    unsigned char col[2];
-    int k;
-
-    if (i & 1) {
-      k = 7;
-    } else {
-      k = 6 - i;
-    }
-    col[0] = (g_colors[k] & 0xe0) | (b_colors[k] >> 3);
-    col[1] = (r_colors[k] & 0xf8) | (g_colors[k] >> 5);
-    paint_rect2 (dest, w * 2, x1, y1, x2 - x1, y2 - y1, col);
-  }
-
-  /* -I, white, Q regions */
-  for (i = 0; i < 3; i++) {
-    int x1 = i * w / 6;
-    int x2 = (i + 1) * w / 6;
-    unsigned char col[2];
-    int k;
-
-    if (i == 0) {
-      k = 8;
-    } else if (i == 1) {
-      k = 0;
-    } else
-      k = 9;
-
-    col[0] = (g_colors[k] & 0xe0) | (b_colors[k] >> 3);
-    col[1] = (r_colors[k] & 0xf8) | (g_colors[k] >> 5);
-    paint_rect2 (dest, w * 2, x1, y2, x2 - x1, h - y2, col);
-  }
-
-  {
-    int x1 = w / 2;
-    int x2 = w - 1;
-
-    paint_rect_random (dest, w * 2, x1 * 2, y2, (x2 - x1) * 2, h - y2);
-  }
-}
-
-#ifdef unused
-static void
-gst_videotestsrc_colors_yuv (GstVideotestsrc * v, unsigned char *dest, int w, int h)
-{
-  int index;
-  int i;
-  int j;
-  int k;
-  paintinfo pi;
-  paintinfo *p = &pi;
-  static int static_y = 0;
-
-  p->width = w;
-  p->height = h;
-  index = paintrect_find_fourcc (v->format);
-  if (index < 0)
-    return;
-
-  fourcc_list[index].paint_setup (p, dest);
-  p->paint_hline = fourcc_list[index].paint_hline;
-
-  /* color bars */
-  for (i = 0; i < 16; i++) {
-    int x1 = (i * w) >> 4;
-    int x2 = ((i + 1) * w) >> 4;
-
-    p->Y = static_y;
-    p->U = i * 17;
-    for (j = 0; j < 16; j++) {
-      int y1 = (j * h) >> 4;
-      int y2 = ((j + 1) * h) >> 4;
-
-      p->V = j * 17;
-      for (k = y1; k < y2; k++) {
-	p->paint_hline (p, x1, k, (x2 - x1));
-      }
-    }
-  }
-
-  static_y += 17;
-  if (static_y >= 256)
-    static_y = 0;
-}
-#endif
 

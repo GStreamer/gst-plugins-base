@@ -40,11 +40,10 @@ G_BEGIN_DECLS
   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_VIDEOTESTSRC))
 
 typedef enum {
-  GST_VIDEOTESTSRC_POINT_SAMPLE,
-  GST_VIDEOTESTSRC_NEAREST,
-  GST_VIDEOTESTSRC_BILINEAR,
-  GST_VIDEOTESTSRC_BICUBIC
-} GstVideoTestSrcMethod;
+  GST_VIDEOTESTSRC_SMPTE,
+  GST_VIDEOTESTSRC_SNOW,
+  GST_VIDEOTESTSRC_BLACK,
+} GstVideotestsrcPattern;
 
 typedef struct _GstVideotestsrc GstVideotestsrc;
 typedef struct _GstVideotestsrcClass GstVideotestsrcClass;
@@ -55,16 +54,19 @@ struct _GstVideotestsrc {
   GstPad *sinkpad,*srcpad;
 
   /* video state */
-  guint32 format;
+  char *format_name;
   gint width;
   gint height;
-  gint forced_format;
+  char *forced_format;
+  struct fourcc_list_struct *fourcc;
   
   /* private */
   gint64 timestamp;
   gint64 interval;
   gint bpp;
   int rate;
+  int type;
+  GstClock *clock;
 
   GstBufferPool *pool;
 
@@ -75,9 +77,7 @@ struct _GstVideotestsrcClass {
   GstElementClass parent_class;
 };
 
-static GType gst_videotestsrc_get_type(void);
-
-static void gst_videotestsrc_setup(GstVideotestsrc *);
+GType gst_videotestsrc_get_type(void);
 
 G_END_DECLS
 
