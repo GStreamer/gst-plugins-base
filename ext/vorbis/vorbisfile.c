@@ -24,7 +24,7 @@
 #include <gst/gst.h>
 #include <vorbis/codec.h>
 #include <vorbis/vorbisfile.h>
-#include <gst/gstbytestream.h>
+#include <gst/bytestream.h>
 
 #define GST_TYPE_VORBISFILE \
   (vorbisfile_get_type())
