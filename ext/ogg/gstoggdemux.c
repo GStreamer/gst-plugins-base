@@ -695,7 +695,6 @@ gst_ogg_pad_submit_packet (GstOggPad * pad, ogg_packet * packet)
     ret = GST_RPAD_CHAINFUNC (pad->elem_pad) (pad->elem_pad, buf);
   }
 
-done:
   pad->packetno++;
 
   return ret;

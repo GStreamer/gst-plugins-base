@@ -1413,8 +1413,8 @@ gst_xvimagesink_event (GstPad * pad, GstEvent * event)
     {
       GstClockID id;
 
-      GST_STREAM_LOCK (pad);
       gst_xvimagesink_finish_preroll (xvimagesink, pad, NULL);
+      GST_STREAM_LOCK (pad);
       /* wait for last frame to finish */
       id = gst_clock_new_single_shot_id (GST_VIDEOSINK_CLOCK (xvimagesink),
           xvimagesink->end_time + GST_ELEMENT (xvimagesink)->base_time);
@@ -1561,11 +1561,12 @@ gst_xvimagesink_chain (GstPad * pad, GstBuffer * buffer)
     return GST_FLOW_NOT_NEGOTIATED;
   }
 
-  GST_STREAM_LOCK (pad);
   result = gst_xvimagesink_finish_preroll (xvimagesink, pad, buf);
   if (result != GST_FLOW_OK) {
     goto done;
   }
+
+  GST_STREAM_LOCK (pad);
 
   /* update time */
   if (GST_BUFFER_TIMESTAMP_IS_VALID (buf)) {
@@ -1608,8 +1609,8 @@ gst_xvimagesink_chain (GstPad * pad, GstBuffer * buffer)
 
   result = GST_FLOW_OK;
 
-done:
   GST_STREAM_UNLOCK (pad);
+done:
   gst_buffer_unref (buf);
 
   gst_xvimagesink_handle_xevents (xvimagesink, pad);

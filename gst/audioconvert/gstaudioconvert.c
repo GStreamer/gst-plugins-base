@@ -272,6 +272,8 @@ gst_audio_convert_caps_remove_format_info (GstPad * pad, GstCaps * caps)
 
   size = gst_caps_get_size (caps);
 
+  caps = gst_caps_make_writable (caps);
+
   for (i = size - 1; i >= 0; i--) {
     GstStructure *structure;
 
@@ -417,7 +419,7 @@ gst_audio_convert_setcaps (GstPad * pad, GstCaps * caps)
 
     if (othercaps) {
       /* peel off first one */
-      GstCaps *targetcaps = gst_caps_copy_1 (othercaps);
+      GstCaps *targetcaps = gst_caps_copy_nth (othercaps, 0);
       GstStructure *structure = gst_caps_get_structure (targetcaps, 0);
 
       gst_caps_unref (othercaps);

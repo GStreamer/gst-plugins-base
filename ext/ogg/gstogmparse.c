@@ -416,15 +416,18 @@ gst_ogm_parse_chain (GstPad * pad, GstBuffer * buffer)
             caps = NULL;
             break;
           }
-          caps = gst_riff_create_audio_caps (codec_id, NULL, NULL, NULL);
-          gst_caps_set_simple (caps,
-              "channels", G_TYPE_INT, ogm->hdr.s.audio.channels,
-              "rate", G_TYPE_INT, ogm->hdr.samples_per_unit, NULL);
-          GST_LOG_OBJECT (ogm, "Type: %s, subtype: 0x%04x, "
+          caps =
+              gst_riff_create_audio_caps (codec_id, NULL, NULL, NULL, NULL,
+              NULL);
+          gst_caps_set_simple (caps, "channels", G_TYPE_INT,
+              ogm->hdr.s.audio.channels, "rate", G_TYPE_INT,
+              ogm->hdr.samples_per_unit, NULL);
+          GST_LOG_OBJECT (ogm,
+              "Type: %s, subtype: 0x%04x, "
               "channels: %d, samplerate: %d, blockalign: %d, bps: %d",
               ogm->hdr.streamtype, codec_id, ogm->hdr.s.audio.channels,
-              ogm->hdr.samples_per_unit,
-              ogm->hdr.s.audio.blockalign, ogm->hdr.s.audio.avgbytespersec);
+              ogm->hdr.samples_per_unit, ogm->hdr.s.audio.blockalign,
+              ogm->hdr.s.audio.avgbytespersec);
           break;
         }
         case 'v':{
@@ -441,7 +444,7 @@ gst_ogm_parse_chain (GstPad * pad, GstBuffer * buffer)
               ogm->hdr.time_unit, 10000000. / ogm->hdr.time_unit,
               ogm->hdr.samples_per_unit, ogm->hdr.default_len,
               ogm->hdr.buffersize, ogm->hdr.bits_per_sample);
-          caps = gst_riff_create_video_caps (fcc, NULL, NULL, NULL);
+          caps = gst_riff_create_video_caps (fcc, NULL, NULL, NULL, NULL, NULL);
           gst_caps_set_simple (caps,
               "width", G_TYPE_INT, ogm->hdr.s.video.width,
               "height", G_TYPE_INT, ogm->hdr.s.video.height,

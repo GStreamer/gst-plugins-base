@@ -114,7 +114,7 @@ gst_ffmpegcsp_caps_remove_format_info (GstCaps * caps)
   GstStructure *structure;
   GstCaps *rgbcaps;
 
-  caps = gst_caps_copy_on_write (caps);
+  caps = gst_caps_make_writable (caps);
 
   for (i = 0; i < gst_caps_get_size (caps); i++) {
     structure = gst_caps_get_structure (caps, i);
@@ -259,7 +259,7 @@ gst_ffmpegcsp_setcaps (GstPad * pad, GstCaps * caps)
       /* set the size on the otherpad */
       othercaps = gst_pad_get_caps (otherpeer);
       if (othercaps) {
-        GstCaps *targetcaps = gst_caps_copy_1 (othercaps);
+        GstCaps *targetcaps = gst_caps_copy_nth (othercaps, 0);
 
         gst_caps_unref (othercaps);
 
