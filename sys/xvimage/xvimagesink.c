@@ -1390,6 +1390,10 @@ gst_xvimagesink_change_state (GstElement * element)
   return result;
 }
 
+static GstFlowReturn
+gst_xvimagesink_finish_preroll (GstXvImageSink * xvimagesink, GstPad * pad,
+    GstBuffer * buf);
+
 static gboolean
 gst_xvimagesink_event (GstPad * pad, GstEvent * event)
 {
@@ -1398,11 +1402,10 @@ gst_xvimagesink_event (GstPad * pad, GstEvent * event)
 
   xvimagesink = GST_XVIMAGESINK (GST_PAD_PARENT (pad));
 
-  GST_STREAM_LOCK (pad);
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_EOS:
-      gst_element_finish_preroll (GST_ELEMENT (xvimagesink),
-          GST_STREAM_GET_LOCK (pad));
+      GST_STREAM_LOCK (pad);
+      gst_xvimagesink_finish_preroll (xvimagesink, pad, NULL);
       gst_clock_id_wait (gst_clock_new_single_shot_id (GST_VIDEOSINK_CLOCK
               (xvimagesink),
               xvimagesink->end_time + GST_ELEMENT (xvimagesink)->base_time),
@@ -1411,67 +1414,29 @@ gst_xvimagesink_event (GstPad * pad, GstEvent * event)
           gst_message_new_eos (GST_OBJECT (xvimagesink)));
       result = TRUE;
       break;
+      GST_STREAM_UNLOCK (pad);
+    case GST_EVENT_FLUSH:
+      if (xvimagesink->clock_id) {
+        gst_clock_id_unlock (xvimagesink->clock_id);
+        xvimagesink->clock_id = NULL;
+      }
+      GST_STATE_LOCK (xvimagesink);
+      g_cond_broadcast (GST_STATE_GET_COND (xvimagesink));
+      GST_STATE_UNLOCK (xvimagesink);
+      result = TRUE;
+      break;
     default:
-      result = gst_pad_event_default (pad, event);
+      result = TRUE;
       break;
   }
-  GST_STREAM_UNLOCK (pad);
+  gst_event_unref (event);
 
   return result;
 }
 
 static GstFlowReturn
-gst_xvimagesink_chain (GstPad * pad, GstBuffer * buffer)
+gst_xvimagesink_show_frame (GstXvImageSink * xvimagesink, GstBuffer * buf)
 {
-  GstBuffer *buf = NULL;
-  GstXvImageSink *xvimagesink;
-  GstCaps *caps;
-  GstFlowReturn result;
-
-  xvimagesink = GST_XVIMAGESINK (GST_PAD_PARENT (pad));
-
-  buf = GST_BUFFER (buffer);
-
-  caps = gst_buffer_get_caps (buffer);
-  if (caps && caps != GST_PAD_CAPS (pad)) {
-    if (gst_xvimagesink_parse_caps (pad, caps)) {
-      gst_pad_set_caps (pad, caps);
-    } else {
-      GST_ELEMENT_ERROR (xvimagesink, CORE, NEGOTIATION, (NULL),
-          ("received unkown format"));
-      gst_element_abort_preroll (GST_ELEMENT (xvimagesink));
-      return GST_FLOW_NOT_NEGOTIATED;
-    }
-  }
-  if (!GST_PAD_CAPS (pad)) {
-    return GST_FLOW_NOT_NEGOTIATED;
-  }
-
-  GST_STREAM_LOCK (pad);
-  result =
-      gst_element_finish_preroll (GST_ELEMENT (xvimagesink),
-      GST_STREAM_GET_LOCK (pad));
-  if (result != GST_FLOW_OK) {
-    goto done;
-  }
-
-  /* update time */
-  if (GST_BUFFER_TIMESTAMP_IS_VALID (buf)) {
-    xvimagesink->time = GST_BUFFER_TIMESTAMP (buf);
-    if (GST_BUFFER_DURATION_IS_VALID (buf)) {
-      xvimagesink->end_time = GST_BUFFER_DURATION (buf) + xvimagesink->time;
-    }
-  }
-  GST_LOG_OBJECT (xvimagesink, "clock wait: %" GST_TIME_FORMAT,
-      GST_TIME_ARGS (xvimagesink->time));
-
-  if (GST_VIDEOSINK_CLOCK (xvimagesink)) {
-    //gst_element_wait (GST_ELEMENT (xvimagesink), xvimagesink->time);
-    gst_clock_id_wait (gst_clock_new_single_shot_id (GST_VIDEOSINK_CLOCK
-            (xvimagesink),
-            xvimagesink->time + GST_ELEMENT (xvimagesink)->base_time), NULL);
-  }
-
   /* If this buffer has been allocated using our buffer management we simply
      put the ximage which is in the PRIVATE pointer */
   if (GST_BUFFER_FREE_DATA_FUNC (buf) == gst_xvimagesink_buffer_free) {
@@ -1497,6 +1462,120 @@ gst_xvimagesink_chain (GstPad * pad, GstBuffer * buffer)
         MIN (GST_BUFFER_SIZE (buf), xvimagesink->xvimage->size));
     gst_xvimagesink_xvimage_put (xvimagesink, xvimagesink->xvimage);
   }
+  return GST_FLOW_OK;
+}
+
+static GstFlowReturn
+gst_xvimagesink_finish_preroll (GstXvImageSink * xvimagesink, GstPad * pad,
+    GstBuffer * buf)
+{
+  GstFlowReturn result = GST_FLOW_OK;
+
+  /* grab state change lock */
+  GST_STATE_LOCK (xvimagesink);
+  /* if we are going to PAUSED, we can commit the state change */
+  if (GST_STATE_PENDING (xvimagesink) == GST_STATE_PAUSED) {
+    gst_element_commit_state (GST_ELEMENT (xvimagesink));
+  }
+  /* if we are paused we need to wait for playing to continue */
+  if (GST_STATE (xvimagesink) == GST_STATE_PAUSED) {
+    GST_DEBUG_OBJECT (xvimagesink,
+        "element %s wants to finish preroll", GST_ELEMENT_NAME (xvimagesink));
+
+    if (buf)
+      gst_xvimagesink_show_frame (xvimagesink, buf);
+
+    //GST_STREAM_UNLOCK (pad);
+
+    /* here we wait for the next state change */
+    while (GST_STATE (xvimagesink) == GST_STATE_PAUSED) {
+      if (GST_RPAD_IS_FLUSHING (pad)) {
+        GST_DEBUG_OBJECT (xvimagesink, "pad is flushing");
+        result = GST_FLOW_UNEXPECTED;
+        //GST_STREAM_LOCK (pad);
+        goto done;
+      }
+
+      GST_DEBUG_OBJECT (xvimagesink, "waiting for next state change");
+      GST_STATE_WAIT (xvimagesink);
+      GST_DEBUG_OBJECT (xvimagesink, "got unlocked, maybe a state change");
+    }
+
+    //GST_STREAM_LOCK (pad);
+
+    /* check if we got playing */
+    if (GST_STATE (xvimagesink) != GST_STATE_PLAYING) {
+      /* not playing, we can't accept the buffer */
+      result = GST_FLOW_WRONG_STATE;
+    }
+
+    GST_DEBUG_OBJECT (xvimagesink, "done preroll");
+  }
+done:
+  GST_STATE_UNLOCK (xvimagesink);
+
+  return result;
+}
+
+static GstFlowReturn
+gst_xvimagesink_chain (GstPad * pad, GstBuffer * buffer)
+{
+  GstBuffer *buf = NULL;
+  GstXvImageSink *xvimagesink;
+  GstCaps *caps;
+  GstFlowReturn result;
+
+  xvimagesink = GST_XVIMAGESINK (GST_PAD_PARENT (pad));
+
+  buf = GST_BUFFER (buffer);
+
+  caps = gst_buffer_get_caps (buffer);
+  if (caps && caps != GST_PAD_CAPS (pad)) {
+    if (gst_xvimagesink_parse_caps (pad, caps)) {
+      gst_pad_set_caps (pad, caps);
+    } else {
+      GST_ELEMENT_ERROR (xvimagesink, CORE, NEGOTIATION, (NULL),
+          ("received unkown format"));
+      gst_element_abort_preroll (GST_ELEMENT (xvimagesink));
+      gst_buffer_unref (buffer);
+      return GST_FLOW_NOT_NEGOTIATED;
+    }
+  }
+  if (!GST_PAD_CAPS (pad)) {
+    gst_buffer_unref (buffer);
+    return GST_FLOW_NOT_NEGOTIATED;
+  }
+
+  GST_STREAM_LOCK (pad);
+  result = gst_xvimagesink_finish_preroll (xvimagesink, pad, buf);
+  if (result != GST_FLOW_OK) {
+    goto done;
+  }
+
+  /* update time */
+  if (GST_BUFFER_TIMESTAMP_IS_VALID (buf)) {
+    xvimagesink->time = GST_BUFFER_TIMESTAMP (buf);
+    if (GST_BUFFER_DURATION_IS_VALID (buf)) {
+      xvimagesink->end_time = GST_BUFFER_DURATION (buf) + xvimagesink->time;
+    }
+  }
+  GST_LOG_OBJECT (xvimagesink, "clock wait: %" GST_TIME_FORMAT,
+      GST_TIME_ARGS (xvimagesink->time));
+
+  if (GST_VIDEOSINK_CLOCK (xvimagesink)) {
+    GstClockReturn ret;
+
+    //gst_element_wait (GST_ELEMENT (xvimagesink), xvimagesink->time);
+    xvimagesink->clock_id =
+        gst_clock_new_single_shot_id (GST_VIDEOSINK_CLOCK (xvimagesink),
+        xvimagesink->time + GST_ELEMENT (xvimagesink)->base_time);
+
+    ret = gst_clock_id_wait (xvimagesink->clock_id, NULL);
+    xvimagesink->clock_id = NULL;
+    GST_LOG_OBJECT (xvimagesink, "clock entry done: %d", ret);
+  }
+
+  gst_xvimagesink_show_frame (xvimagesink, buf);
 
   /* set correct time for next buffer */
   if (!GST_BUFFER_TIMESTAMP_IS_VALID (buf) && xvimagesink->framerate > 0) {

@@ -108,6 +108,10 @@ struct _GstOggPad
   gint64 packetno;
   gint64 offset;
 
+  GstEvent *new_segment;
+  gint64 start;
+  gint64 stop;
+
   gint64 current_granule;
 
   GstClockTime start_time;      /* the timestamp of the first sample */
@@ -145,6 +149,8 @@ struct _GstOggDemux
 
   OggState state;
   gboolean seekable;
+
+  gboolean need_chains;
 
   /* state */
   GArray *chains;               /* list of chains we know */
@@ -564,11 +570,25 @@ gst_ogg_pad_submit_packet (GstOggPad * pad, ogg_packet * packet)
     buf =
         gst_pad_alloc_buffer (GST_PAD (pad), GST_BUFFER_OFFSET_NONE,
         packet->bytes, GST_PAD_CAPS (pad));
+
+    if (pad->new_segment) {
+      ret = gst_pad_push_event (GST_PAD (pad), pad->new_segment);
+      pad->new_segment = NULL;
+    }
     if (buf) {
+      //GstFormat target = GST_FORMAT_TIME;
+
       memcpy (buf->data, packet->packet, packet->bytes);
+      /*
+         if (packet->granulepos != -1) {
+         gst_pad_convert (pad->elem_pad, 
+         GST_FORMAT_DEFAULT, packet->granulepos,
+         &target, &GST_BUFFER_TIMESTAMP (buf));
+         }
+       */
+      pad->offset = packet->granulepos;
       GST_BUFFER_OFFSET (buf) = -1;
       GST_BUFFER_OFFSET_END (buf) = packet->granulepos;
-      pad->offset = packet->granulepos;
 
       ret = gst_pad_push (GST_PAD (pad), buf);
     }
@@ -909,6 +929,7 @@ gst_ogg_demux_get_data (GstOggDemux * ogg)
     return -1;
 
   size = gst_ogg_demux_submit_buffer (ogg, buffer);
+  gst_buffer_unref (buffer);
 
   return size;
 }
@@ -1031,6 +1052,26 @@ gst_ogg_demux_perform_seek (GstOggDemux * ogg, gint64 pos)
   if (pos < 0 || pos > total)
     return FALSE;
 
+  /* first step is to unlock the streaming thread if it is
+   * blocked in a chain call, we do this by starting the flush */
+  {
+    gint i;
+
+    for (i = 0; i < ogg->chains->len; i++) {
+      GstOggChain *chain = g_array_index (ogg->chains, GstOggChain *, i);
+      gint j;
+
+      for (j = 0; j < chain->streams->len; j++) {
+        GstOggPad *pad = g_array_index (chain->streams, GstOggPad *, j);
+
+        gst_pad_push_event (GST_PAD (pad), gst_event_new_flush (FALSE));
+      }
+    }
+  }
+
+  /* now grab the stream lock so that streaming cannot continue */
+  GST_STREAM_LOCK (ogg->sinkpad);
+
   /* first find the chain to search in */
   for (i = ogg->chains->len - 1; i >= 0; i--) {
     chain = g_array_index (ogg->chains, GstOggChain *, i);
@@ -1083,8 +1124,9 @@ gst_ogg_demux_perform_seek (GstOggDemux * ogg, gint64 pos)
           ", end %" G_GINT64_FORMAT, bisect, begin, end);
 
       result = gst_ogg_demux_get_next_page (ogg, &og, end - ogg->offset);
-      if (result == OV_EREAD)
+      if (result == OV_EREAD) {
         goto seek_error;
+      }
 
       if (result < 0) {
         if (bisect <= begin + 1) {
@@ -1149,11 +1191,47 @@ gst_ogg_demux_perform_seek (GstOggDemux * ogg, gint64 pos)
       }
     }
   }
+
+  ogg->offset = best;
+
+  /* now we have a new position, prepare for streaming again */
+  {
+    gint i;
+    GstEvent *event;
+
+    /* create the discont event we are going to send out */
+    event = gst_event_new_discontinuous (1.0,
+        GST_FORMAT_TIME, (gint64) pos, (gint64) ogg->total_time, NULL);
+
+    for (i = 0; i < ogg->chains->len; i++) {
+      GstOggChain *chain = g_array_index (ogg->chains, GstOggChain *, i);
+      gint j;
+
+      for (j = 0; j < chain->streams->len; j++) {
+        GstOggPad *pad = g_array_index (chain->streams, GstOggPad *, j);
+
+        gst_event_ref (event);
+        /* queue the event for the strea,ing thread */
+        pad->new_segment = event;
+        gst_pad_push_event (GST_PAD (pad), gst_event_new_flush (TRUE));
+      }
+    }
+    gst_event_unref (event);
+    /* restart our task since it might have been stopped when we did the 
+     * flush. */
+    gst_task_start (GST_RPAD_TASK (ogg->sinkpad));
+  }
+  /* streaming can continue now */
+  GST_STREAM_UNLOCK (ogg->sinkpad);
+
   /* FIXME, switch to different chain */
 
   return TRUE;
 
 seek_error:
+  GST_DEBUG_OBJECT (ogg, "got a seek error");
+  GST_STREAM_UNLOCK (ogg->sinkpad);
+
   return FALSE;
 }
 
@@ -1492,7 +1570,7 @@ no_length:
  * the serialno, submit pages and packets to the oggpads
  */
 static GstFlowReturn
-gst_ogg_demux_chain (GstPad * pad, GstBuffer * buffer)
+gst_ogg_demux_chain_unlocked (GstPad * pad, GstBuffer * buffer)
 {
   GstOggDemux *ogg;
   gint ret = -1;
@@ -1558,6 +1636,18 @@ gst_ogg_demux_chain (GstPad * pad, GstBuffer * buffer)
   return result;
 }
 
+static GstFlowReturn
+gst_ogg_demux_chain (GstPad * pad, GstBuffer * buffer)
+{
+  GstFlowReturn ret;
+
+  GST_STREAM_LOCK (pad);
+  ret = gst_ogg_demux_chain_unlocked (pad, buffer);
+  GST_STREAM_UNLOCK (pad);
+
+  return ret;
+}
+
 /* random access code 
  *
  * - first find all the chains and streams by scanning the 
@@ -1571,35 +1661,49 @@ static gboolean
 gst_ogg_demux_loop (GstOggPad * pad)
 {
   GstOggDemux *ogg;
+  GstFlowReturn ret;
+  GstBuffer *buffer;
 
   ogg = GST_OGG_DEMUX (GST_OBJECT_PARENT (pad));
 
-  gst_ogg_demux_find_chains (ogg);
-
-  ogg->offset = 0;
-  while (TRUE) {
-    GstFlowReturn ret;
-    GstBuffer *buffer;
-
-    GST_LOG_OBJECT (ogg, "pull data %lld", ogg->offset);
-    if (ogg->offset == ogg->length)
-      return FALSE;
-
-    ret = gst_pad_pull_range (ogg->sinkpad, ogg->offset, CHUNKSIZE, &buffer);
-    if (ret != GST_FLOW_OK) {
-      GST_LOG_OBJECT (ogg, "got error %d", ret);
-      return FALSE;
-    }
-
-    ogg->offset += GST_BUFFER_SIZE (buffer);
-
-    ret = gst_ogg_demux_chain (ogg->sinkpad, buffer);
-    if (ret != GST_FLOW_OK) {
-      GST_LOG_OBJECT (ogg, "got error %d", ret);
-      return FALSE;
-    }
+  GST_STREAM_LOCK (pad);
+  if (ogg->need_chains) {
+    gst_ogg_demux_find_chains (ogg);
+    ogg->need_chains = FALSE;
+    ogg->offset = 0;
   }
+
+  GST_LOG_OBJECT (ogg, "pull data %lld", ogg->offset);
+  if (ogg->offset == ogg->length)
+    goto error;
+
+  ret = gst_pad_pull_range (ogg->sinkpad, ogg->offset, CHUNKSIZE, &buffer);
+  if (ret != GST_FLOW_OK) {
+    GST_LOG_OBJECT (ogg, "got error %d", ret);
+    goto error;
+  }
+
+  ogg->offset += GST_BUFFER_SIZE (buffer);
+
+  ret = gst_ogg_demux_chain_unlocked (ogg->sinkpad, buffer);
+  if (ret == GST_FLOW_UNEXPECTED) {
+    gst_task_pause (GST_RPAD_TASK (ogg->sinkpad));
+    GST_LOG_OBJECT (ogg, "got unexpected %d", ret);
+    goto done;
+  }
+  if (ret != GST_FLOW_OK) {
+    GST_LOG_OBJECT (ogg, "got error %d", ret);
+    goto error;
+  }
+done:
+  GST_STREAM_UNLOCK (pad);
+
   return TRUE;
+
+error:
+
+  GST_STREAM_UNLOCK (pad);
+  return FALSE;
 }
 
 static gboolean
@@ -1622,6 +1726,7 @@ gst_ogg_demux_sink_activate (GstPad * sinkpad, GstActivateMode mode)
             gst_scheduler_create_task (GST_ELEMENT_SCHEDULER (ogg),
             (GstTaskFunction) gst_ogg_demux_loop, sinkpad);
 
+        ogg->need_chains = TRUE;
         gst_task_start (GST_RPAD_TASK (sinkpad));
         ogg->seekable = TRUE;
         GST_STREAM_UNLOCK (sinkpad);
