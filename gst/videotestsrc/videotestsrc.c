@@ -398,7 +398,7 @@ struct fourcc_list_struct *paintinfo_find_by_structure(const GstStructure *struc
     int fourcc;
     guint32 format;
 
-    ret = gst_structure_get_fourcc(structure, "format", &format);
+    ret = gst_structure_get_fourcc (structure, "format", &format);
     if (!ret) return NULL;
     for (i = 0; i < n_fourccs; i++) {
       s = fourcc_list[i].fourcc;
@@ -435,7 +435,7 @@ struct fourcc_list_struct *paintinfo_find_by_structure(const GstStructure *struc
     return NULL;
   }
 
-  g_critical("format not found");
+  g_critical("format not found for media type %s", media_type);
 
   return NULL;
 }
