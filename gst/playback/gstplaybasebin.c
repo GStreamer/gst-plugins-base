@@ -1147,26 +1147,14 @@ gst_play_base_bin_change_state (GstElement * element)
   switch (GST_STATE_TRANSITION (element)) {
     case GST_STATE_NULL_TO_READY:
     {
-      GstScheduler *sched;
-
       play_base_bin->thread = gst_bin_new ("internal_thread");
-      sched = gst_scheduler_factory_make ("opt", play_base_bin->thread);
-      if (sched) {
-        gst_element_set_scheduler (play_base_bin->thread, sched);
 
-        gst_element_set_state (play_base_bin->thread, GST_STATE_READY);
+      gst_element_set_state (play_base_bin->thread, GST_STATE_READY);
 
-        g_signal_connect (G_OBJECT (play_base_bin->thread), "eos",
-            G_CALLBACK (play_base_eos), play_base_bin);
-        g_signal_connect (play_base_bin->thread, "found_tag",
-            G_CALLBACK (gst_play_base_bin_found_tag), play_base_bin);
-      } else {
-        g_warning ("could not get 'opt' scheduler");
-        gst_object_unref (GST_OBJECT (play_base_bin->thread));
-        play_base_bin->thread = NULL;
-
-        ret = GST_STATE_FAILURE;
-      }
+      g_signal_connect (G_OBJECT (play_base_bin->thread), "eos",
+          G_CALLBACK (play_base_eos), play_base_bin);
+      g_signal_connect (play_base_bin->thread, "found_tag",
+          G_CALLBACK (gst_play_base_bin_found_tag), play_base_bin);
       break;
     }
     case GST_STATE_READY_TO_PAUSED:

@@ -365,7 +365,7 @@ find_compatibles (GstDecodeBin * decode_bin, const GstCaps * caps)
           /* non empty intersection, we can use this element */
           to_try = g_list_append (to_try, factory);
         }
-        gst_caps_free (intersect);
+        gst_caps_unref (intersect);
       }
     }
   }
@@ -558,7 +558,7 @@ get_our_ghost_pad (GstDecodeBin * decode_bin, GstPad * pad)
   }
 
   GST_DEBUG_OBJECT (decode_bin, "looping over ghostpads");
-  ghostpads = gst_pad_get_ghost_pad_list (pad);
+  ghostpads = GST_REAL_PAD (pad)->ghostpads;
   while (ghostpads) {
     GstPad *ghostpad;
 
@@ -729,8 +729,9 @@ close_link (GstElement * element, GstDecodeBin * decode_bin)
       gst_element_get_name (element));
 
   /* loop over all the padtemplates */
-  for (pads = gst_element_get_pad_template_list (element); pads;
-      pads = g_list_next (pads)) {
+  for (pads =
+      gst_element_class_get_pad_template_list (GST_ELEMENT_GET_CLASS (element));
+      pads; pads = g_list_next (pads)) {
     GstPadTemplate *templ = GST_PAD_TEMPLATE (pads->data);
     const gchar *templ_name;
 
