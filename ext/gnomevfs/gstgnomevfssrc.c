@@ -268,14 +268,10 @@ static void gst_gnomevfssrc_set_property(GObject *object, guint prop_id, const G
                         /* if it's not a proper uri, default to file: -- this
                          * is a crude test */
                         if (!strchr (location, ':'))
-			{
-				gchar *newloc = gnome_vfs_escape_path_string(location);
-                                if (*newloc == '/')
-                                        src->filename = g_strdup_printf ("file://%s", newloc);
+                                if (*location == '/')
+                                        src->filename = g_strdup_printf ("file://%s", location);
                                 else
-                                        src->filename = g_strdup_printf ("file://%s/%s", getcwd(cwd, PATH_MAX), newloc);
-				g_free(newloc);
-			}
+                                        src->filename = g_strdup_printf ("file://%s/%s", getcwd(cwd, PATH_MAX), location);
                         else
                                 src->filename = g_strdup (g_value_get_string (value));
 		}
