@@ -463,13 +463,16 @@ gst_vorbisenc_add_metadata (VorbisEnc *vorbisenc, GstCaps *caps)
     if (gst_props_entry_get_type (prop) == GST_PROPS_STRING_TYPE) {
       const gchar *name = gst_props_entry_get_name (prop);
       const gchar *value;
+      char *upper_name;
 
       gst_props_entry_get_string (prop, &value);
 
       if (!value || strlen (value) == 0)
 	continue;
 
-      vorbis_comment_add_tag (&vorbisenc->vc, g_strdup (name), g_strdup (value));
+      upper_name = g_ascii_strup (name, -1);
+      vorbis_comment_add_tag (&vorbisenc->vc, g_strdup (upper_name), g_strdup (value));
+      g_free (upper_name);
     }
   }
 }
