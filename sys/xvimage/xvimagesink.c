@@ -446,7 +446,7 @@ gst_xvimagesink_get_xv_support (GstXContext *xcontext)
                 }
               case XvYUV:
 		format_caps = gst_caps2_new_simple ("video/x-raw-yuv",
-		    "fourcc", GST_TYPE_FOURCC,formats[i].id,
+		    "format", GST_TYPE_FOURCC,formats[i].id,
 		    "width", GST_TYPE_INT_RANGE, 0, G_MAXINT,
 		    "height", GST_TYPE_INT_RANGE, 0, G_MAXINT,
 		    "framerate", GST_TYPE_DOUBLE_RANGE, 0.0, G_MAXDOUBLE,
