@@ -23,6 +23,8 @@
 #include "config.h"
 #endif
 
+#include <glib/gstrfuncs.h>
+
 #include <gst/gsttypefind.h>
 #include <gst/gstelement.h>
 #include <gst/gstversion.h>
@@ -119,6 +121,67 @@ utf8_type_find (GstTypeFind *tf, gpointer unused)
     }
     size /= 2;
     probability -= step;
+  }
+}
+
+/*** text/uri-list ************************************************************/
+
+#define URI_CAPS GST_CAPS_NEW ("uri_type_find", "text/uri-list", NULL)
+#define BUFFER_SIZE 16 /* If the string is < 16 bytes we're screwed */
+#define INC_BUFFER { 							\
+  pos++;								\
+  if (pos == BUFFER_SIZE) {						\
+    pos = 0;								\
+    offset += BUFFER_SIZE;						\
+    data = gst_type_find_peek (tf, offset, BUFFER_SIZE);		\
+    if (data == NULL) return;						\
+  } else {								\
+    data++;								\
+  }									\
+}
+static void
+uri_type_find (GstTypeFind *tf, gpointer unused)
+{
+  guint8 *data = gst_type_find_peek (tf, 0, BUFFER_SIZE);
+  guint pos = 0;
+  guint offset = 0;
+  
+  if (data) {
+    /* Search for # comment lines */
+    while (*data == '#') {
+      /* Goto end of line */
+      while (*data != '\n') {
+        INC_BUFFER;
+      }
+
+      INC_BUFFER;
+    }
+
+    if (!g_ascii_isalpha (*data)) {
+      /* Had a non alpha char - can't be uri-list */
+      return;
+    }
+
+    INC_BUFFER;
+    
+    while (g_ascii_isalnum (*data)) {
+      INC_BUFFER;
+    }
+
+    if (*data != ':') {
+      /* First non alpha char is not a : */
+      return;
+    }
+
+    /* Get the next 2 bytes as well */
+    data = gst_type_find_peek (tf, offset + pos, 3);
+    if (data == NULL) return;
+    
+    if (data[1] != '/' && data[2] != '/') {
+      return;
+    }
+
+    gst_type_find_suggest (tf, GST_TYPE_FIND_MAXIMUM, URI_CAPS);
   }
 }
 
@@ -468,7 +531,7 @@ rm_type_find (GstTypeFind *tf, gpointer unused)
 static void
 wav_type_find (GstTypeFind *tf, gpointer unused)
 {
-  guint8 *data = gst_type_find_peek (tf, 0, 4);
+  guint8 *data = gst_type_find_peek (tf, 0, 12);
 
   if (data && memcmp (data, "RIFF", 4) == 0) {
     data += 8;
@@ -690,6 +753,7 @@ plugin_init (GModule *module, GstPlugin *plugin)
   static gchar * wav_exts[] = {"wav", NULL};
   static gchar * aiff_exts[] = {"aiff", "aif", "aifc", NULL};
   static gchar * shn_exts[] = {"shn", NULL};
+  static gchar * uri_exts[] = {"ram", NULL};
 
   GST_DEBUG_CATEGORY_INIT (type_find_debug, "typefindfunctions", GST_DEBUG_FG_GREEN | GST_DEBUG_BG_RED, "generic type find functions");
 
@@ -723,6 +787,8 @@ plugin_init (GModule *module, GstPlugin *plugin)
 	  swf_type_find, swf_exts, SWF_CAPS, NULL);
   gst_type_find_factory_register (plugin, "text/plain", GST_ELEMENT_RANK_MARGINAL,
 	  utf8_type_find, utf8_exts, UTF8_CAPS, NULL);
+  gst_type_find_factory_register (plugin, "text/uri-list", GST_ELEMENT_RANK_MARGINAL,
+	  uri_type_find, uri_exts, URI_CAPS, NULL);
   gst_type_find_factory_register (plugin, "audio/x-wav", GST_ELEMENT_RANK_SECONDARY,
 	  wav_type_find, wav_exts, WAV_CAPS, NULL);
   gst_type_find_factory_register (plugin, "audio/x-aiff", GST_ELEMENT_RANK_SECONDARY,
