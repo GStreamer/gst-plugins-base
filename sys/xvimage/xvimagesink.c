@@ -1362,7 +1362,8 @@ gst_xvimagesink_change_state (GstElement * element)
         gst_clock_id_unschedule (xvimagesink->clock_id);
       }
       GST_UNLOCK (xvimagesink);
-      result = GST_STATE_ASYNC;
+      if (!xvimagesink->in_eos)
+        result = GST_STATE_ASYNC;
       break;
     case GST_STATE_PAUSED_TO_READY:
       xvimagesink->framerate = 0;
@@ -1421,6 +1422,9 @@ gst_xvimagesink_event (GstPad * pad, GstEvent * event)
       gst_clock_id_unref (id);
       gst_element_post_message (GST_ELEMENT (xvimagesink),
           gst_message_new_eos (GST_OBJECT (xvimagesink)));
+      GST_STATE_LOCK (xvimagesink);
+      xvimagesink->in_eos = TRUE;
+      GST_STATE_UNLOCK (xvimagesink);
       result = TRUE;
       GST_STREAM_UNLOCK (pad);
       break;
@@ -1434,6 +1438,7 @@ gst_xvimagesink_event (GstPad * pad, GstEvent * event)
       GST_UNLOCK (xvimagesink);
       /* unlock from a possible state change/preroll */
       GST_STATE_LOCK (xvimagesink);
+      xvimagesink->in_eos = FALSE;
       g_cond_broadcast (GST_STATE_GET_COND (xvimagesink));
       GST_STATE_UNLOCK (xvimagesink);
       /* now we are completely unblocked and the _chain method
@@ -2126,6 +2131,8 @@ gst_xvimagesink_init (GstXvImageSink * xvimagesink)
 
   xvimagesink->synchronous = FALSE;
   xvimagesink->par = NULL;
+
+  xvimagesink->in_eos = FALSE;
 }
 
 static void

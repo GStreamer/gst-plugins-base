@@ -138,6 +138,9 @@ typedef enum
   OGG_STATE_STREAMING,
 } OggState;
 
+#define GST_CHAIN_LOCK(ogg)	g_mutex_lock((ogg)->chain_lock)
+#define GST_CHAIN_UNLOCK(ogg)	g_mutex_unlock((ogg)->chain_lock)
+
 struct _GstOggDemux
 {
   GstElement element;
@@ -153,6 +156,7 @@ struct _GstOggDemux
   gboolean need_chains;
 
   /* state */
+  GMutex *chain_lock;           /* we need the lock to protect the chains */
   GArray *chains;               /* list of chains we know */
 
   GstClockTime total_time;      /* the total time of this ogg, this is the sum of
@@ -171,7 +175,10 @@ struct _GstOggDemuxClass
 
 static gboolean gst_ogg_demux_perform_seek (GstOggDemux * ogg, gint64 pos);
 
+static void gst_ogg_pad_class_init (GstOggPadClass * klass);
 static void gst_ogg_pad_init (GstOggPad * pad);
+static void gst_ogg_pad_dispose (GObject * object);
+static void gst_ogg_pad_finalize (GObject * object);
 static const GstFormat *gst_ogg_pad_formats (GstPad * pad);
 static const GstEventMask *gst_ogg_pad_event_masks (GstPad * pad);
 static const GstQueryType *gst_ogg_pad_query_types (GstPad * pad);
@@ -181,7 +188,10 @@ static gboolean gst_ogg_pad_src_convert (GstPad * pad,
 static gboolean gst_ogg_pad_src_query (GstPad * pad, GstQueryType type,
     GstFormat * format, gint64 * value);
 static gboolean gst_ogg_pad_event (GstPad * pad, GstEvent * event);
+static GstCaps *gst_ogg_pad_getcaps (GstPad * pad);
 static GstCaps *gst_ogg_type_find (ogg_packet * packet);
+
+static GstRealPadClass *ogg_pad_parent_class = NULL;
 
 static GType
 gst_ogg_pad_get_type (void)
@@ -193,7 +203,7 @@ gst_ogg_pad_get_type (void)
       sizeof (GstOggPadClass),
       NULL,
       NULL,
-      NULL,
+      (GClassInitFunc) gst_ogg_pad_class_init,
       NULL,
       NULL,
       sizeof (GstOggPad),
@@ -209,14 +219,27 @@ gst_ogg_pad_get_type (void)
 }
 
 static void
+gst_ogg_pad_class_init (GstOggPadClass * klass)
+{
+  GObjectClass *gobject_class;
+
+  gobject_class = (GObjectClass *) klass;
+
+  ogg_pad_parent_class = g_type_class_ref (G_TYPE_OBJECT);
+
+  gobject_class->dispose = gst_ogg_pad_dispose;
+  gobject_class->finalize = gst_ogg_pad_finalize;
+}
+
+static void
 gst_ogg_pad_init (GstOggPad * pad)
 {
   gst_pad_set_event_function (GST_PAD (pad),
       GST_DEBUG_FUNCPTR (gst_ogg_pad_event));
   gst_pad_set_event_mask_function (GST_PAD (pad),
       GST_DEBUG_FUNCPTR (gst_ogg_pad_event_masks));
-  //gst_pad_set_getcaps_function (GST_PAD (pad), GST_DEBUG_FUNCPTR (gst_ogg_pad_getcaps));
-  //gst_pad_set_query_function (GST_PAD (pad), GST_DEBUG_FUNCPTR (gst_ogg_pad_query));
+  gst_pad_set_getcaps_function (GST_PAD (pad),
+      GST_DEBUG_FUNCPTR (gst_ogg_pad_getcaps));
   gst_pad_set_query_type_function (GST_PAD (pad),
       GST_DEBUG_FUNCPTR (gst_ogg_pad_query_types));
   gst_pad_set_formats_function (GST_PAD (pad),
@@ -235,6 +258,37 @@ gst_ogg_pad_init (GstOggPad * pad)
   pad->start_time = -1;
   pad->first_time = -1;
   pad->last_time = -1;
+}
+
+static void
+gst_ogg_pad_dispose (GObject * object)
+{
+  GstOggPad *pad = GST_OGG_PAD (object);
+
+  gst_object_replace ((GstObject **) (&pad->elem_pad), NULL);
+  gst_object_replace ((GstObject **) (&pad->element), NULL);
+  gst_object_replace ((GstObject **) (&pad->elem_out), NULL);
+
+  pad->chain = NULL;
+  pad->ogg = NULL;
+
+  if (pad->new_segment) {
+    gst_event_unref (pad->new_segment);
+    pad->new_segment = NULL;
+  }
+  ogg_stream_reset (&pad->stream);
+
+  G_OBJECT_CLASS (ogg_pad_parent_class)->dispose (object);
+}
+
+static void
+gst_ogg_pad_finalize (GObject * object)
+{
+  GstOggPad *pad = GST_OGG_PAD (object);
+
+  ogg_stream_clear (&pad->stream);
+
+  G_OBJECT_CLASS (ogg_pad_parent_class)->finalize (object);
 }
 
 static const GstFormat *
@@ -275,6 +329,12 @@ gst_ogg_pad_query_types (GstPad * pad)
   };
 
   return query_types;
+}
+
+static GstCaps *
+gst_ogg_pad_getcaps (GstPad * pad)
+{
+  return gst_caps_ref (GST_PAD_CAPS (pad));
 }
 
 static gboolean
@@ -560,9 +620,6 @@ gst_ogg_pad_submit_packet (GstOggPad * pad, ogg_packet * packet)
   /* first packet, FIXME, do this in chain activation */
   if (pad->packetno == 0) {
     gst_ogg_pad_typefind (pad, packet);
-    if (pad->mode == GST_OGG_PAD_MODE_STREAMING) {
-      gst_element_add_pad (GST_ELEMENT (ogg), GST_PAD (pad));
-    }
   }
 
   /* stream packet to peer plugin */
@@ -684,13 +741,19 @@ gst_ogg_chain_new (GstOggDemux * ogg)
   return chain;
 }
 
-#if 0
 static void
 gst_ogg_chain_free (GstOggChain * chain)
 {
+  gint i;
+
+  for (i = 0; i < chain->streams->len; i++) {
+    GstOggPad *pad = g_array_index (chain->streams, GstOggPad *, i);
+
+    gst_object_unref (GST_OBJECT (pad));
+  }
   g_array_free (chain->streams, TRUE);
+  chain->streams = NULL;
 }
-#endif
 
 static GstOggPad *
 gst_ogg_chain_new_stream (GstOggChain * chain, glong serialno)
@@ -846,6 +909,7 @@ gst_ogg_demux_init (GstOggDemux * ogg)
   gst_pad_set_activate_function (ogg->sinkpad, gst_ogg_demux_sink_activate);
   gst_element_add_pad (GST_ELEMENT (ogg), ogg->sinkpad);
 
+  ogg->chain_lock = g_mutex_new ();
   ogg->chains = g_array_new (FALSE, TRUE, sizeof (GstOggChain *));
   ogg->state = OGG_STATE_NEW_CHAIN;
 }
@@ -857,6 +921,7 @@ gst_ogg_demux_finalize (GObject * object)
 
   ogg = GST_OGG_DEMUX (object);
 
+  g_mutex_free (ogg->chain_lock);
   ogg_sync_clear (&ogg->sync);
 
   if (G_OBJECT_CLASS (parent_class)->finalize)
@@ -1041,6 +1106,50 @@ gst_ogg_demux_get_prev_page (GstOggDemux * ogg, ogg_page * og)
 }
 
 static gboolean
+gst_ogg_demux_deactivate_current_chain (GstOggDemux * ogg)
+{
+  gint i;
+  GstOggChain *chain = ogg->current_chain;
+
+  if (chain == NULL)
+    return TRUE;
+
+  for (i = 0; i < chain->streams->len; i++) {
+    GstOggPad *pad = g_array_index (chain->streams, GstOggPad *, i);
+
+    gst_element_remove_pad (GST_ELEMENT (ogg), GST_PAD (pad));
+  }
+  /* if we cannot seek, we can destroy the chain completely */
+  if (!ogg->seekable) {
+    gst_ogg_chain_free (chain);
+  }
+  ogg->current_chain = NULL;
+
+  return TRUE;
+}
+
+static gboolean
+gst_ogg_demux_activate_chain (GstOggDemux * ogg, GstOggChain * chain)
+{
+  gint i;
+
+  if (chain == ogg->current_chain)
+    return TRUE;
+
+  gst_ogg_demux_deactivate_current_chain (ogg);
+
+  for (i = 0; i < chain->streams->len; i++) {
+    GstOggPad *pad = g_array_index (chain->streams, GstOggPad *, i);
+
+    gst_element_add_pad (GST_ELEMENT (ogg), GST_PAD (pad));
+  }
+
+  ogg->current_chain = chain;
+
+  return TRUE;
+}
+
+static gboolean
 gst_ogg_demux_perform_seek (GstOggDemux * ogg, gint64 pos)
 {
   GstOggChain *chain = NULL;
@@ -1055,14 +1164,18 @@ gst_ogg_demux_perform_seek (GstOggDemux * ogg, gint64 pos)
   total = ogg->total_time;
 
   /* can't seek past start or end */
-  if (pos < 0 || pos > total)
+  if (pos < 0 || pos > total) {
     return FALSE;
+  }
 
   /* first step is to unlock the streaming thread if it is
-   * blocked in a chain call, we do this by starting the flush */
+   * blocked in a chain call, we do this by starting the flush. because
+   * we cannot yet hold any streaming lock, we have to protect the chains
+   * with their own lock. */
   {
     gint i;
 
+    GST_CHAIN_LOCK (ogg);
     for (i = 0; i < ogg->chains->len; i++) {
       GstOggChain *chain = g_array_index (ogg->chains, GstOggChain *, i);
       gint j;
@@ -1073,6 +1186,7 @@ gst_ogg_demux_perform_seek (GstOggDemux * ogg, gint64 pos)
         gst_pad_push_event (GST_PAD (pad), gst_event_new_flush (FALSE));
       }
     }
+    GST_CHAIN_UNLOCK (ogg);
   }
 
   /* now grab the stream lock so that streaming cannot continue */
@@ -1102,8 +1216,6 @@ gst_ogg_demux_perform_seek (GstOggDemux * ogg, gint64 pos)
       "chain begin time %" GST_TIME_FORMAT ", end time %" GST_TIME_FORMAT,
       GST_TIME_ARGS (begintime), GST_TIME_ARGS (endtime));
   GST_DEBUG_OBJECT (ogg, "target %" GST_TIME_FORMAT, GST_TIME_ARGS (target));
-
-  /* make sure our streaming thread is not running */
 
   /* perform the seek */
   while (begin < end) {
@@ -1227,10 +1339,14 @@ gst_ogg_demux_perform_seek (GstOggDemux * ogg, gint64 pos)
      * flush. */
     gst_task_start (GST_RPAD_TASK (ogg->sinkpad));
   }
+
+  /* switch to different chain */
+  if (chain != ogg->current_chain) {
+    gst_ogg_demux_activate_chain (ogg, chain);
+  }
+
   /* streaming can continue now */
   GST_STREAM_UNLOCK (ogg->sinkpad);
-
-  /* FIXME, switch to different chain */
 
   return TRUE;
 
@@ -1481,6 +1597,20 @@ gst_ogg_demux_find_pad (GstOggDemux * ogg, int serialno)
   return NULL;
 }
 
+/* find a chain with a given serial number
+ */
+static GstOggChain *
+gst_ogg_demux_find_chain (GstOggDemux * ogg, int serialno)
+{
+  GstOggPad *pad;
+
+  pad = gst_ogg_demux_find_pad (ogg, serialno);
+  if (pad) {
+    return pad->chain;
+  }
+  return NULL;
+}
+
 /* find all the chains in the ogg file, this reads the first and
  * last page of the ogg stream, if they match then the ogg file has
  * just one chain, else we do a binary search for all chains.
@@ -1554,8 +1684,15 @@ gst_ogg_demux_find_chains (GstOggDemux * ogg)
     }
   }
 
-  /* now dump our chains and streams */
+  /* dump our chains and streams */
   gst_ogg_print (ogg);
+
+  /* activate first chain */
+  if (ogg->chains->len > 0) {
+    GstOggChain *chain = g_array_index (ogg->chains, GstOggChain *, 0);
+
+    gst_ogg_demux_activate_chain (ogg, chain);
+  }
 
   return TRUE;
 
@@ -1608,14 +1745,23 @@ gst_ogg_demux_chain_unlocked (GstPad * pad, GstBuffer * buffer)
           ogg_page_granulepos (&page), ogg_page_bos (&page));
 
       if (ogg_page_bos (&page)) {
+        GstOggChain *chain;
+
         /* first page */
-        if (ogg->state == OGG_STATE_STREAMING) {
-          /* FIXME, remove previous pads since this is a new BOS when
-           * we were in streaming mode. */
-          ogg->state = OGG_STATE_NEW_CHAIN;
-        }
-        pad = gst_ogg_demux_find_pad (ogg, serialno);
-        if (pad == NULL) {
+        /* see if we know about the chain already */
+        chain = gst_ogg_demux_find_chain (ogg, serialno);
+        if (chain) {
+          /* we do, activate it */
+          gst_ogg_demux_activate_chain (ogg, chain);
+          pad = gst_ogg_demux_find_pad (ogg, serialno);
+        } else {
+          /* chain is unknown */
+          if (ogg->state == OGG_STATE_STREAMING) {
+            /* remove existing pads */
+            gst_ogg_demux_deactivate_current_chain (ogg);
+            /* switch to new-chain mode */
+            ogg->state = OGG_STATE_NEW_CHAIN;
+          }
           if (ogg->building_chain == NULL) {
             ogg->building_chain = gst_ogg_chain_new (ogg);
             ogg->building_chain->offset = 0;
@@ -1623,11 +1769,13 @@ gst_ogg_demux_chain_unlocked (GstPad * pad, GstBuffer * buffer)
           pad = gst_ogg_chain_new_stream (ogg->building_chain, serialno);
         }
       } else {
+        /* no more bos pages, see if we need to activate the chain we were
+         * building */
         if (ogg->building_chain) {
-          g_array_append_val (ogg->chains, ogg->building_chain);
+          gst_ogg_demux_activate_chain (ogg, ogg->building_chain);
           ogg->building_chain = NULL;
+          ogg->state = OGG_STATE_STREAMING;
         }
-        ogg->state = OGG_STATE_STREAMING;
         pad = gst_ogg_demux_find_pad (ogg, serialno);
       }
       if (pad) {
@@ -1654,6 +1802,22 @@ gst_ogg_demux_chain (GstPad * pad, GstBuffer * buffer)
   return ret;
 }
 
+static void
+gst_ogg_demux_send_eos (GstOggDemux * ogg)
+{
+  GstOggChain *chain = ogg->current_chain;
+
+  if (chain) {
+    gint i;
+
+    for (i = 0; i < chain->streams->len; i++) {
+      GstOggPad *pad = g_array_index (chain->streams, GstOggPad *, i);
+
+      gst_pad_push_event (GST_PAD (pad), gst_event_new (GST_EVENT_EOS));
+    }
+  }
+}
+
 /* random access code 
  *
  * - first find all the chains and streams by scanning the 
@@ -1674,14 +1838,18 @@ gst_ogg_demux_loop (GstOggPad * pad)
 
   GST_STREAM_LOCK (pad);
   if (ogg->need_chains) {
+    GST_CHAIN_LOCK (ogg);
     gst_ogg_demux_find_chains (ogg);
+    GST_CHAIN_UNLOCK (ogg);
     ogg->need_chains = FALSE;
     ogg->offset = 0;
   }
 
   GST_LOG_OBJECT (ogg, "pull data %lld", ogg->offset);
-  if (ogg->offset == ogg->length)
-    goto stop;
+  if (ogg->offset == ogg->length) {
+    gst_ogg_demux_send_eos (ogg);
+    goto pause;
+  }
 
   ret = gst_pad_pull_range (ogg->sinkpad, ogg->offset, CHUNKSIZE, &buffer);
   if (ret != GST_FLOW_OK) {
