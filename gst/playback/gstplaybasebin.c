@@ -63,8 +63,9 @@ static void gst_play_base_bin_get_property (GObject * object, guint prop_id,
 static GstElementStateReturn gst_play_base_bin_change_state (GstElement *
     element);
 
-static void gst_play_base_bin_add_element (GstBin * bin, GstElement * element);
-static void gst_play_base_bin_remove_element (GstBin * bin,
+static gboolean gst_play_base_bin_add_element (GstBin * bin,
+    GstElement * element);
+static gboolean gst_play_base_bin_remove_element (GstBin * bin,
     GstElement * element);
 
 extern GstElementStateReturn gst_element_set_state_func (GstElement * element,
@@ -172,7 +173,6 @@ gst_play_base_bin_class_init (GstPlayBaseBinClass * klass)
   gobject_klass->dispose = GST_DEBUG_FUNCPTR (gst_play_base_bin_dispose);
 
   /* we handle state changes like an element */
-  gstelement_klass->set_state = GST_ELEMENT_CLASS (element_class)->set_state;
   gstelement_klass->change_state =
       GST_DEBUG_FUNCPTR (gst_play_base_bin_change_state);
 
@@ -199,8 +199,6 @@ gst_play_base_bin_init (GstPlayBaseBin * play_base_bin)
   play_base_bin->queued_groups = NULL;
 
   play_base_bin->queue_size = DEFAULT_QUEUE_SIZE;
-
-  GST_FLAG_SET (play_base_bin, GST_BIN_SELF_SCHEDULABLE);
 }
 
 static void
@@ -849,7 +847,7 @@ gen_source_element (GstPlayBaseBin * play_base_bin)
     return source;
 
   /* buffer */
-  bin = gst_thread_new ("sourcebin");
+  bin = gst_bin_new ("sourcebin");
   queue = gst_element_factory_make ("queue", "buffer");
   g_object_set (queue, "max-size-bytes", 512 * 1024,
       "max-size-buffers", 0, NULL);
@@ -907,11 +905,13 @@ setup_source (GstPlayBaseBin * play_base_bin, GError ** error)
       gst_bin_remove (GST_BIN (play_base_bin->thread), old_src);
     }
     gst_bin_add (GST_BIN (play_base_bin->thread), play_base_bin->source);
+#if 0
     /* make sure the new element has the same state as the parent */
     if (gst_bin_sync_children_state (GST_BIN (play_base_bin->thread)) ==
         GST_STATE_FAILURE) {
       return FALSE;
     }
+#endif
   }
 
   /* remove the old decoder now, if any */
@@ -939,8 +939,8 @@ setup_source (GstPlayBaseBin * play_base_bin, GError ** error)
     /* assume we are going to have no output streams */
     gboolean no_out = TRUE;
 
-    for (pads = gst_element_get_pad_list (play_base_bin->source);
-        pads; pads = g_list_next (pads)) {
+    /* FIXME, not MT safe */
+    for (pads = play_base_bin->source->pads; pads; pads = g_list_next (pads)) {
       GstPad *pad = GST_PAD (pads->data);
       GstStructure *structure;
       const gchar *mimetype;
@@ -957,12 +957,12 @@ setup_source (GstPlayBaseBin * play_base_bin, GError ** error)
       if (caps == NULL || gst_caps_is_empty (caps) ||
           gst_caps_get_size (caps) == 0) {
         if (caps != NULL)
-          gst_caps_free (caps);
+          gst_caps_unref (caps);
         continue;
       }
 
       structure = gst_caps_get_structure (caps, 0);
-      gst_caps_free (caps);
+      gst_caps_unref (caps);
       mimetype = gst_structure_get_name (structure);
 
       if (g_str_has_prefix (mimetype, "audio/x-raw") ||
@@ -1133,7 +1133,7 @@ play_base_eos (GstBin * bin, GstPlayBaseBin * play_base_bin)
 {
   no_more_pads (GST_ELEMENT (bin), play_base_bin);
 
-  gst_element_set_eos (GST_ELEMENT (play_base_bin));
+  //gst_element_set_eos (GST_ELEMENT (play_base_bin));
 }
 
 static GstElementStateReturn
@@ -1149,7 +1149,7 @@ gst_play_base_bin_change_state (GstElement * element)
     {
       GstScheduler *sched;
 
-      play_base_bin->thread = gst_thread_new ("internal_thread");
+      play_base_bin->thread = gst_bin_new ("internal_thread");
       sched = gst_scheduler_factory_make ("opt", play_base_bin->thread);
       if (sched) {
         gst_element_set_scheduler (play_base_bin->thread, sched);
@@ -1287,7 +1287,7 @@ gst_play_base_bin_change_state (GstElement * element)
 /* virtual function to add elements to this bin. The idea is to
  * wrap the element in a thread automatically.
  */
-static void
+static gboolean
 gst_play_base_bin_add_element (GstBin * bin, GstElement * element)
 {
   GstPlayBaseBin *play_base_bin;
@@ -1300,7 +1300,7 @@ gst_play_base_bin_add_element (GstBin * bin, GstElement * element)
       GstElement *thread;
 
       name = g_strdup_printf ("thread_%s", gst_element_get_name (element));
-      thread = gst_thread_new (name);
+      thread = gst_bin_new (name);
       g_free (name);
 
       gst_bin_add (GST_BIN (thread), element);
@@ -1309,14 +1309,16 @@ gst_play_base_bin_add_element (GstBin * bin, GstElement * element)
     gst_bin_add (GST_BIN (play_base_bin->thread), element);
   } else {
     g_warning ("adding elements is not allowed in NULL");
+    return FALSE;
   }
+  return TRUE;
 }
 
 /* virtual function to remove an element from this bin. We have to make
  * sure that we also remove the thread that we used as a container for
  * this element.
  */
-static void
+static gboolean
 gst_play_base_bin_remove_element (GstBin * bin, GstElement * element)
 {
   GstPlayBaseBin *play_base_bin;
@@ -1349,7 +1351,9 @@ gst_play_base_bin_remove_element (GstBin * bin, GstElement * element)
     }
   } else {
     g_warning ("removing elements is not allowed in NULL");
+    return FALSE;
   }
+  return TRUE;
 }
 
 static void

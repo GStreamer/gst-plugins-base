@@ -188,7 +188,7 @@ gst_stream_info_dispose (GObject * object)
   g_free (stream_info->decoder);
   stream_info->decoder = NULL;
   if (stream_info->caps) {
-    gst_caps_free (stream_info->caps);
+    gst_caps_unref (stream_info->caps);
     stream_info->caps = NULL;
   }
 

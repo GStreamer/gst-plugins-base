@@ -497,6 +497,7 @@ theora_dec_sink_event (GstPad * pad, GstEvent * event)
       } else {
         GST_WARNING_OBJECT (dec,
             "discont event didn't include offset, we might set it wrong now");
+        dec->granulepos = -1;
       }
       if (dec->packetno < 3) {
         if (dec->granulepos != 0)
@@ -767,12 +768,6 @@ theora_dec_chain (GstPad * pad, GstBuffer * buffer)
     keyframe = (packet.packet[0] & 0x40) == 0;
     if (keyframe) {
       dec->need_keyframe = FALSE;
-#if 0
-      guint ilog;
-      guint64 framecount;
-      gboolean add_one = FALSE;
-
-#endif
     } else if (dec->need_keyframe) {
       GST_WARNING_OBJECT (dec, "dropping frame because we need a keyframe");
       /* drop frames if we're looking for a keyframe */

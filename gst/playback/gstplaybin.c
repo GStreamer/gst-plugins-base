@@ -218,8 +218,6 @@ gst_play_bin_init (GstPlayBin * play_bin)
   play_bin->cache = g_hash_table_new_full (g_str_hash, g_str_equal,
       NULL, (GDestroyNotify) gst_object_unref);
 
-  /* no iterate is needed */
-  GST_FLAG_SET (play_bin, GST_BIN_SELF_SCHEDULABLE);
 }
 
 static void
@@ -832,7 +830,7 @@ gst_play_bin_send_event (GstElement * element, GstEvent * event)
 
   play_bin = GST_PLAY_BIN (element);
 
-  state = gst_element_get_state (element);
+  gst_element_get_state (element, &state, NULL, NULL);
   /* we pause the pipeline first before sending the event. We only
    * do this if the pipeline was playing. */
   if (state == GST_STATE_PLAYING) {

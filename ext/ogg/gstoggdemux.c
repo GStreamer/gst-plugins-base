@@ -23,7 +23,6 @@
 #include "config.h"
 #endif
 #include <gst/gst.h>
-#include <gst/bytestream/filepad.h>
 #include <ogg/ogg.h>
 #include <string.h>
 
@@ -1346,7 +1345,7 @@ gst_ogg_demux_perform_seek (GstOggDemux * ogg, gint64 pos)
         GstOggPad *pad = g_array_index (chain->streams, GstOggPad *, j);
 
         gst_event_ref (event);
-        /* queue the event for the strea,ing thread */
+        /* queue the event for the streaming thread */
         pad->new_segment = event;
         gst_pad_push_event (GST_PAD (pad), gst_event_new_flush (TRUE));
       }
@@ -1855,6 +1854,7 @@ gst_ogg_demux_loop (GstOggPad * pad)
 
   GST_STREAM_LOCK (pad);
   if (ogg->need_chains) {
+    /* this is the only place where we write chains */
     GST_CHAIN_LOCK (ogg);
     gst_ogg_demux_find_chains (ogg);
     GST_CHAIN_UNLOCK (ogg);
@@ -1870,20 +1870,16 @@ gst_ogg_demux_loop (GstOggPad * pad)
 
   ret = gst_pad_pull_range (ogg->sinkpad, ogg->offset, CHUNKSIZE, &buffer);
   if (ret != GST_FLOW_OK) {
-    GST_LOG_OBJECT (ogg, "got error %d", ret);
-    goto stop;
+    GST_LOG_OBJECT (ogg, "got unexpected %d", ret);
+    goto pause;
   }
 
   ogg->offset += GST_BUFFER_SIZE (buffer);
 
   ret = gst_ogg_demux_chain_unlocked (ogg->sinkpad, buffer);
-  if (ret == GST_FLOW_UNEXPECTED) {
+  if (ret != GST_FLOW_OK) {
     GST_LOG_OBJECT (ogg, "got unexpected %d, pausing", ret);
     goto pause;
-  }
-  if (ret != GST_FLOW_OK) {
-    GST_LOG_OBJECT (ogg, "got error %d", ret);
-    goto stop;
   }
 
   GST_STREAM_UNLOCK (pad);
@@ -1892,12 +1888,6 @@ gst_ogg_demux_loop (GstOggPad * pad)
 pause:
   GST_LOG_OBJECT (ogg, "pausing task");
   gst_task_pause (GST_RPAD_TASK (ogg->sinkpad));
-  GST_STREAM_UNLOCK (pad);
-  return;
-
-stop:
-  GST_LOG_OBJECT (ogg, "stopping task");
-  gst_task_stop (GST_RPAD_TASK (ogg->sinkpad));
   GST_STREAM_UNLOCK (pad);
   return;
 }
@@ -1923,8 +1913,8 @@ gst_ogg_demux_sink_activate (GstPad * sinkpad, GstActivateMode mode)
             (GstTaskFunction) gst_ogg_demux_loop, sinkpad);
 
         ogg->need_chains = TRUE;
-        gst_task_start (GST_RPAD_TASK (sinkpad));
         ogg->seekable = TRUE;
+        gst_task_start (GST_RPAD_TASK (sinkpad));
         GST_STREAM_UNLOCK (sinkpad);
         result = TRUE;
       }
