@@ -308,7 +308,7 @@ mp3_type_frame_length_from_header (guint32 header, guint *put_layer,
 static void
 mp3_type_find (GstTypeFind *tf, gpointer unused)
 {
-  guint8 *data;
+  guint8 *data = NULL;
   guint size = 0;
   guint64 skipped = 0;
 
@@ -473,6 +473,19 @@ aiff_type_find (GstTypeFind *tf, gpointer unused)
     data += 8;
     if (memcmp (data, "AIFF", 4) == 0)
       gst_type_find_suggest (tf, GST_TYPE_FIND_MAXIMUM, AIFF_CAPS);
+  }
+}
+
+/*** audio/x-shorten ****************************************/
+
+#define SHN_CAPS GST_CAPS_NEW ("shn_type_find", "audio/x-shorten", NULL)
+static void
+shn_type_find (GstTypeFind *tf, gpointer unused)
+{
+  guint8 *data = gst_type_find_peek (tf, -8, 8);
+
+  if (data && memcmp (data, "SHNAMPSK", 8) == 0) {
+    gst_type_find_suggest (tf, GST_TYPE_FIND_MAXIMUM, SHN_CAPS);
   }
 }
 
@@ -660,6 +673,7 @@ plugin_init (GModule *module, GstPlugin *plugin)
   static gchar * utf8_exts[] = {"txt", NULL};
   static gchar * wav_exts[] = {"wav", NULL};
   static gchar * aiff_exts[] = {"aiff", "aif", "aifc", NULL};
+  static gchar * shn_exts[] = {"shn", NULL};
 
   gst_type_find_factory_register (plugin, "video/x-ms-asf", GST_ELEMENT_RANK_SECONDARY,
 	  asf_type_find, asf_exts, ASF_CAPS, NULL);
@@ -695,6 +709,9 @@ plugin_init (GModule *module, GstPlugin *plugin)
 	  wav_type_find, wav_exts, WAV_CAPS, NULL);
   gst_type_find_factory_register (plugin, "audio/x-aiff", GST_ELEMENT_RANK_SECONDARY,
 	  aiff_type_find, aiff_exts, AIFF_CAPS, NULL);
+
+  gst_type_find_factory_register (plugin, "audio/x-shorten", GST_ELEMENT_RANK_SECONDARY,
+	  shn_type_find, shn_exts, SHN_CAPS, NULL);
 
   return TRUE;
 }
