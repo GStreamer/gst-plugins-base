@@ -213,7 +213,7 @@ gst_tcpsrc_get (GstPad *pad)
     {
       guchar *buf=NULL;
       xmlDocPtr doc;
-      GstCaps *caps;
+      GstCaps2 *caps;
       
       switch (tcpsrc->control) {
     	case CONTROL_TCP:
@@ -235,7 +235,7 @@ gst_tcpsrc_get (GstPad *pad)
       	   else {
              buf[ret] = '\0';
              doc = xmlParseMemory(buf, ret);
-             caps = gst_caps_load_thyself(doc->xmlRootNode);
+             caps = gst_caps2_load_thyself(doc->xmlRootNode);
       
              /* foward the connect, we don't signal back the result here... */
              gst_pad_proxy_link (tcpsrc->srcpad, caps);
