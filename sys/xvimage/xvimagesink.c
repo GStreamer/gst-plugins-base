@@ -2115,6 +2115,7 @@ gst_xvimagesink_init (GstXvImageSink * xvimagesink)
   xvimagesink->xwindow = NULL;
   xvimagesink->xvimage = NULL;
   xvimagesink->cur_image = NULL;
+  xvimagesink->clock_id = NULL;
 
   xvimagesink->hue = xvimagesink->saturation = 0;
   xvimagesink->contrast = xvimagesink->brightness = 0;

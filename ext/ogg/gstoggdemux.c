@@ -103,6 +103,8 @@ struct _GstOggPad
   GstOggChain *chain;           /* the chain we are part of */
   GstOggDemux *ogg;             /* the ogg demuxer we are part of */
 
+  GList *headers;
+
   gint serialno;
   gint64 packetno;
   gint64 offset;
@@ -257,6 +259,8 @@ gst_ogg_pad_init (GstOggPad * pad)
   pad->start_time = -1;
   pad->first_time = -1;
   pad->last_time = -1;
+
+  pad->headers = NULL;
 }
 
 static void
@@ -270,6 +274,10 @@ gst_ogg_pad_dispose (GObject * object)
 
   pad->chain = NULL;
   pad->ogg = NULL;
+
+  g_list_foreach (pad->headers, (GFunc) gst_data_unref, NULL);
+  g_list_free (pad->headers);
+  pad->headers = NULL;
 
   if (pad->new_segment) {
     gst_event_unref (pad->new_segment);
@@ -582,6 +590,8 @@ gst_ogg_pad_typefind (GstOggPad * pad, ogg_packet * packet)
         }
       }
       g_list_free (factories);
+    } else {
+      pad->mode = GST_OGG_PAD_MODE_STREAMING;
     }
   }
   pad->element = element;
@@ -620,6 +630,18 @@ gst_ogg_pad_submit_packet (GstOggPad * pad, ogg_packet * packet)
   if (pad->packetno == 0) {
     gst_ogg_pad_typefind (pad, packet);
   }
+  if (ogg->state != OGG_STATE_STREAMING) {
+    buf = gst_buffer_new_and_alloc (packet->bytes);
+    memcpy (GST_BUFFER_DATA (buf), packet->packet, packet->bytes);
+    gst_buffer_set_caps (buf, GST_PAD_CAPS (pad));
+    GST_BUFFER_OFFSET (buf) = -1;
+    GST_BUFFER_OFFSET_END (buf) = packet->granulepos;
+
+    /* we are collecting the chain info, just need to queue the buffers */
+    pad->headers = g_list_append (pad->headers, buf);
+
+    goto done;
+  }
 
   /* stream packet to peer plugin */
   if (pad->mode == GST_OGG_PAD_MODE_STREAMING) {
@@ -632,16 +654,8 @@ gst_ogg_pad_submit_packet (GstOggPad * pad, ogg_packet * packet)
       pad->new_segment = NULL;
     }
     if (buf) {
-      //GstFormat target = GST_FORMAT_TIME;
-
       memcpy (buf->data, packet->packet, packet->bytes);
-      /*
-         if (packet->granulepos != -1) {
-         gst_pad_convert (pad->elem_pad, 
-         GST_FORMAT_DEFAULT, packet->granulepos,
-         &target, &GST_BUFFER_TIMESTAMP (buf));
-         }
-       */
+
       pad->offset = packet->granulepos;
       GST_BUFFER_OFFSET (buf) = -1;
       GST_BUFFER_OFFSET_END (buf) = packet->granulepos;
@@ -669,6 +683,7 @@ gst_ogg_pad_submit_packet (GstOggPad * pad, ogg_packet * packet)
     ret = GST_RPAD_CHAINFUNC (pad->elem_pad) (pad->elem_pad, buf);
   }
 
+done:
   pad->packetno++;
 
   return ret;
@@ -710,6 +725,9 @@ gst_ogg_pad_submit_page (GstOggPad * pad, ogg_page * page)
       case 1:
         result = gst_ogg_pad_submit_packet (pad, &packet);
         if (result != GST_FLOW_OK) {
+          GST_WARNING_OBJECT (ogg, "could not submit packet, error: %d",
+              result);
+          gst_ogg_pad_reset (pad);
           done = TRUE;
         }
         break;
@@ -1138,9 +1156,18 @@ gst_ogg_demux_activate_chain (GstOggDemux * ogg, GstOggChain * chain)
   gst_ogg_demux_deactivate_current_chain (ogg);
 
   for (i = 0; i < chain->streams->len; i++) {
-    GstOggPad *pad = g_array_index (chain->streams, GstOggPad *, i);
+    GstOggPad *pad;
+    GList *headers;
+
+    pad = g_array_index (chain->streams, GstOggPad *, i);
 
     gst_element_add_pad (GST_ELEMENT (ogg), GST_PAD (pad));
+
+    for (headers = pad->headers; headers; headers = g_list_next (headers)) {
+      GstBuffer *buffer = GST_BUFFER (headers->data);
+
+      gst_pad_push (GST_PAD_CAST (pad), buffer);
+    }
   }
 
   ogg->current_chain = chain;
@@ -1603,6 +1630,13 @@ gst_ogg_demux_find_pad (GstOggDemux * ogg, int serialno)
   GstOggPad *pad;
   gint i;
 
+  /* first look in current chain if any */
+  if (ogg->current_chain) {
+    pad = gst_ogg_chain_get_stream (ogg->current_chain, serialno);
+    if (pad)
+      return pad;
+  }
+
   for (i = 0; i < ogg->chains->len; i++) {
     GstOggChain *chain = g_array_index (ogg->chains, GstOggChain *, i);
 
@@ -1708,6 +1742,8 @@ gst_ogg_demux_find_chains (GstOggDemux * ogg)
     GstOggChain *chain = g_array_index (ogg->chains, GstOggChain *, 0);
 
     gst_ogg_demux_activate_chain (ogg, chain);
+    /* and we are streaming now */
+    ogg->state = OGG_STATE_STREAMING;
   }
 
   return TRUE;
@@ -1903,6 +1939,7 @@ gst_ogg_demux_sink_activate (GstPad * sinkpad, GstActivateMode mode)
   switch (mode) {
     case GST_ACTIVATE_PUSH:
       ogg->seekable = FALSE;
+      result = TRUE;
       break;
     case GST_ACTIVATE_PULL:
       /* if we have a scheduler we can start the task */
@@ -1986,6 +2023,7 @@ typedef struct
   GstCaps *caps;
 }
 OggTypeFind;
+
 static guint8 *
 ogg_find_peek (gpointer data, gint64 offset, guint size)
 {
