@@ -393,16 +393,28 @@ mp3_type_find (GstTypeFind *tf, gpointer unused)
 
 /*** video/mpeg systemstream **************************************************/
 
-#define MPEG_SYS_CAPS GST_CAPS_NEW ("mpeg_sys_type_find", "video/mpeg",		\
-    "systemstream", GST_PROPS_BOOLEAN (TRUE))
+#define MPEG_SYS_CAPS(version) (version == 0 ? 				\
+    GST_CAPS_NEW ("mpeg_type_find", "video/mpeg",			\
+	          "systemstream", GST_PROPS_BOOLEAN (TRUE),		\
+		  "mpegversion", GST_PROPS_INT_RANGE (1, 2)) :		\
+    GST_CAPS_NEW ("mpeg_type_find", "video/mpeg",			\
+	    	  "systemstream", GST_PROPS_BOOLEAN (TRUE),		\
+		  "mpegversion", GST_PROPS_INT (version)))
+
 static void
 mpeg_sys_type_find (GstTypeFind *tf, gpointer unused)
 {
   static guint8 header[] = {0x00, 0x00, 0x01, 0xBA};
   guint8 *data = gst_type_find_peek (tf, 0, 5);
 
-  if (data && (memcmp (data, header, 4) == 0) && ((data[4] & 0xC0) == 0x40)) {
-    gst_type_find_suggest (tf, GST_TYPE_FIND_MAXIMUM, MPEG_SYS_CAPS);
+  if (data && (memcmp (data, header, 4)) == 0) {
+    if ((data[4] & 0xC0) == 0x40) {
+      /* type 2 */
+      gst_type_find_suggest (tf, GST_TYPE_FIND_MAXIMUM, MPEG_SYS_CAPS (2));
+    } else if ((data[4] & 0xf0) == 0x20) {
+      /* type 1 */
+      gst_type_find_suggest (tf, GST_TYPE_FIND_MAXIMUM, MPEG_SYS_CAPS (1));
+    }
   }
 };
 
@@ -700,7 +712,7 @@ plugin_init (GModule *module, GstPlugin *plugin)
   gst_type_find_factory_register (plugin, "audio/mpeg", GST_ELEMENT_RANK_PRIMARY,
 	  mp3_type_find, mp3_exts, MP3_CAPS (0), NULL);
   gst_type_find_factory_register (plugin, "video/mpeg", GST_ELEMENT_RANK_PRIMARY,
-	  mpeg_sys_type_find, mpeg_sys_exts, MPEG_SYS_CAPS, NULL);
+	  mpeg_sys_type_find, mpeg_sys_exts, MPEG_SYS_CAPS (0), NULL);
   gst_type_find_factory_register (plugin, "application/ogg", GST_ELEMENT_RANK_PRIMARY,
 	  ogg_type_find, ogg_exts, OGG_CAPS, NULL);
   gst_type_find_factory_register (plugin, "video/quicktime", GST_ELEMENT_RANK_SECONDARY,
