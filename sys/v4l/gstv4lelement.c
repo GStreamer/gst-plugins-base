@@ -587,8 +587,9 @@ gst_v4lelement_change_state (GstElement *element)
         }
         if (temp >= 0 && gst_v4l_has_audio(v4lelement))
         {
-          if (!gst_v4l_set_audio(v4lelement, n, temp))
-            return GST_STATE_FAILURE;
+          /* don't check return value - hack for some (many)
+           * webcams that report that they have sound while they don't */
+          gst_v4l_set_audio(v4lelement, n, temp);
         }
       }
       for (n=V4L_PICTURE_HUE;n<=V4L_PICTURE_SATURATION;n++)
