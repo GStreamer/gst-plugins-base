@@ -946,7 +946,7 @@ static GstBuffer *gst_gnomevfssrc_get(GstPad *pad)
 	return buf;
 }
 
-/* open the file and mmap it, necessary to go to READY state */
+/* open the file, do stuff necessary to go to READY state */
 static gboolean gst_gnomevfssrc_open_file(GstGnomeVFSSrc *src)
 {
 	GnomeVFSResult result;
@@ -992,8 +992,8 @@ static gboolean gst_gnomevfssrc_open_file(GstGnomeVFSSrc *src)
 		{
 			GST_DEBUG (0, "got MIME type \"%s\", setting caps",
 				   info->mime_type);
-			GstCaps *caps = gst_pad_get_caps (src->srcpad);
-			gst_caps_set_mime (caps, info->mime_type);
+			GstCaps *caps = gst_caps_new ("gnomevfssrc", info->mime_type, NULL);
+			gst_pad_try_set_caps (src->srcpad, caps);
 		}
 		else
 			GST_DEBUG (0, "No mime type available");
@@ -1007,14 +1007,13 @@ static gboolean gst_gnomevfssrc_open_file(GstGnomeVFSSrc *src)
 	
 	audiocast_do_notifications(src);
 	
-	GST_DEBUG(0, "open %s", gnome_vfs_result_to_string (result));
+	GST_DEBUG(0, "open result: %s", gnome_vfs_result_to_string (result));
 
 	GST_FLAG_SET(src, GST_GNOMEVFSSRC_OPEN);
 
 	return TRUE;
 }
 
-/* unmap and close the file */
 static void gst_gnomevfssrc_close_file(GstGnomeVFSSrc *src)
 {
 	g_return_if_fail(GST_FLAG_IS_SET(src, GST_GNOMEVFSSRC_OPEN));
