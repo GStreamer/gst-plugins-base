@@ -492,8 +492,8 @@ gst_ogm_parse_chain (GstPad * pad, GstBuffer * buffer)
         }
         switch (ogm->hdr.streamtype[0]) {
           case 'v':
-            if (keyframe)
-              GST_BUFFER_FLAG_SET (sbuf, GST_BUFFER_KEY_UNIT);
+            if (!keyframe)
+              GST_BUFFER_FLAG_SET (sbuf, GST_BUFFER_DELTA_UNIT);
             GST_BUFFER_TIMESTAMP (sbuf) = (GST_SECOND / 10000000) *
                 ogm->next_granulepos * ogm->hdr.time_unit;
             GST_BUFFER_DURATION (sbuf) = (GST_SECOND / 10000000) *

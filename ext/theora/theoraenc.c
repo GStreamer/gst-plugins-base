@@ -368,10 +368,8 @@ theora_buffer_from_packet (GstTheoraEnc * enc, ogg_packet * packet,
   /* the second most significant bit of the first data byte is cleared
    * for keyframes */
   if ((packet->packet[0] & 0x40) == 0) {
-    GST_BUFFER_FLAG_SET (buf, GST_BUFFER_KEY_UNIT);
     GST_BUFFER_FLAG_UNSET (buf, GST_BUFFER_DELTA_UNIT);
   } else {
-    GST_BUFFER_FLAG_UNSET (buf, GST_BUFFER_KEY_UNIT);
     GST_BUFFER_FLAG_SET (buf, GST_BUFFER_DELTA_UNIT);
   }
 

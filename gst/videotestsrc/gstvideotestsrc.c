@@ -307,36 +307,41 @@ gst_videotestsrc_src_unlink (GstPad * pad)
 }
 
 static gboolean
-gst_videotestsrc_activate (GstPad * pad, gboolean active)
+gst_videotestsrc_activate (GstPad * pad, GstActivateMode mode)
 {
   gboolean result = FALSE;
   GstVideotestsrc *videotestsrc;
 
   videotestsrc = GST_VIDEOTESTSRC (GST_OBJECT_PARENT (pad));
 
-  if (active) {
-    /* if we have a scheduler we can start the task */
-    if (GST_ELEMENT_SCHEDULER (videotestsrc)) {
+  switch (mode) {
+    case GST_ACTIVATE_PULL:
+      break;
+    case GST_ACTIVATE_PUSH:
+      /* if we have a scheduler we can start the task */
+      if (GST_ELEMENT_SCHEDULER (videotestsrc)) {
+        GST_STREAM_LOCK (pad);
+        videotestsrc->task =
+            gst_scheduler_create_task (GST_ELEMENT_SCHEDULER (videotestsrc),
+            (GstTaskFunction) gst_videotestsrc_loop, pad);
+
+        gst_task_start (videotestsrc->task);
+        GST_STREAM_UNLOCK (pad);
+        result = TRUE;
+      }
+      break;
+    case GST_ACTIVATE_NONE:
+      /* step 1, unblock clock sync (if any) */
+
+      /* step 2, make sure streaming finishes */
       GST_STREAM_LOCK (pad);
-      videotestsrc->task =
-          gst_scheduler_create_task (GST_ELEMENT_SCHEDULER (videotestsrc),
-          (GstTaskFunction) gst_videotestsrc_loop, pad);
-
-      gst_task_start (videotestsrc->task);
+      /* step 3, stop the task */
+      gst_task_stop (videotestsrc->task);
+      gst_object_unref (GST_OBJECT (videotestsrc->task));
       GST_STREAM_UNLOCK (pad);
+
       result = TRUE;
-    }
-  } else {
-    /* step 1, unblock clock sync (if any) */
-
-    /* step 2, make sure streaming finishes */
-    GST_STREAM_LOCK (pad);
-    /* step 3, stop the task */
-    gst_task_stop (videotestsrc->task);
-    gst_object_unref (GST_OBJECT (videotestsrc->task));
-    GST_STREAM_UNLOCK (pad);
-
-    result = TRUE;
+      break;
   }
   return result;
 }

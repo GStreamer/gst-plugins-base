@@ -63,6 +63,8 @@ struct _GstTheoraDec
   gint offset_x, offset_y;
 
   gboolean crop;
+
+  GList *queued;
 };
 
 struct _GstTheoraDecClass
@@ -182,6 +184,7 @@ gst_theora_dec_init (GstTheoraDec * dec)
   gst_element_add_pad (GST_ELEMENT (dec), dec->srcpad);
 
   dec->crop = THEORA_DEF_CROP;
+  dec->queued = NULL;
 }
 
 /* FIXME: copy from libtheora, theora should somehow make this available for seeking */
@@ -195,6 +198,27 @@ _theora_ilog (unsigned int v)
     v >>= 1;
   }
   return (ret);
+}
+
+static void
+_inc_granulepos (GstTheoraDec * dec)
+{
+  guint ilog;
+  gint framecount;
+
+  if (dec->granulepos == -1)
+    return;
+
+  ilog = _theora_ilog (dec->info.keyframe_frequency_force - 1);
+
+  framecount = dec->granulepos >> ilog;
+  framecount += dec->granulepos - (framecount << ilog);
+
+  GST_DEBUG_OBJECT (dec, "framecount=%d, ilog=%u", framecount, ilog);
+
+  framecount++;
+
+  dec->granulepos = (framecount << ilog);
 }
 
 static const GstFormat *
@@ -248,7 +272,7 @@ theora_dec_src_convert (GstPad * pad,
   GstTheoraDec *dec;
   guint64 scale = 1;
 
-  dec = GST_THEORA_DEC (gst_pad_get_parent (pad));
+  dec = GST_THEORA_DEC (GST_PAD_PARENT (pad));
 
   /* we need the info part before we can done something */
   if (dec->packetno < 1)
@@ -309,7 +333,7 @@ theora_dec_sink_convert (GstPad * pad,
   gboolean res = TRUE;
   GstTheoraDec *dec;
 
-  dec = GST_THEORA_DEC (gst_pad_get_parent (pad));
+  dec = GST_THEORA_DEC (GST_PAD_PARENT (pad));
 
   /* we need the info part before we can done something */
   if (dec->packetno < 1)
@@ -375,7 +399,7 @@ theora_dec_src_query (GstPad * pad, GstQueryType query, GstFormat * format,
     gint64 * value)
 {
   gint64 granulepos;
-  GstTheoraDec *dec = GST_THEORA_DEC (gst_pad_get_parent (pad));
+  GstTheoraDec *dec = GST_THEORA_DEC (GST_PAD_PARENT (pad));
   GstFormat my_format = GST_FORMAT_DEFAULT;
   guint64 time;
 
@@ -401,6 +425,7 @@ theora_dec_src_query (GstPad * pad, GstQueryType query, GstFormat * format,
   GST_LOG_OBJECT (dec,
       "query %u: peer returned granulepos: %llu - we return %llu (format %u)",
       query, granulepos, *value, *format);
+
   return TRUE;
 }
 
@@ -411,7 +436,7 @@ theora_dec_src_event (GstPad * pad, GstEvent * event)
   GstTheoraDec *dec;
   GstFormat format;
 
-  dec = GST_THEORA_DEC (gst_pad_get_parent (pad));
+  dec = GST_THEORA_DEC (GST_PAD_PARENT (pad));
 
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_SEEK:{
@@ -534,13 +559,72 @@ theora_dec_chain (GstPad * pad, GstBuffer * buffer)
   buf = GST_BUFFER (buffer);
 
   if (dec->packetno >= 3) {
-    offset_end = GST_BUFFER_OFFSET_END (buf);
-    if (offset_end != -1) {
-      dec->granulepos = offset_end;
-    }
+    /* try timestamp first */
+    outtime = GST_BUFFER_TIMESTAMP (buf);
 
-    /* granulepos to time */
-    outtime = GST_SECOND * theora_granule_time (&dec->state, dec->granulepos);
+    if (outtime == -1) {
+      gboolean need_flush = FALSE;
+
+      /* the offset end field in theora is actually the time of
+       * this frame, not the end time */
+      offset_end = GST_BUFFER_OFFSET_END (buf);
+      GST_DEBUG_OBJECT (dec, "got buffer with granule %lld", offset_end);
+
+      if (offset_end != -1) {
+        if (dec->granulepos == -1) {
+          GST_DEBUG_OBJECT (dec, "first buffer with granule");
+          need_flush = TRUE;
+        }
+        dec->granulepos = offset_end;
+      }
+      if (dec->granulepos == -1) {
+        /* we need to wait for a buffer with at least a timestamp or an 
+         * offset before we can generate valid timestamps */
+        dec->queued = g_list_append (dec->queued, buf);
+        GST_DEBUG_OBJECT (dec, "queued buffer");
+        return GST_FLOW_OK;
+      } else {
+        /* granulepos to time */
+        outtime =
+            GST_SECOND * theora_granule_time (&dec->state, dec->granulepos);
+
+        GST_DEBUG_OBJECT (dec, "granulepos=%lld outtime=%" GST_TIME_FORMAT,
+            dec->granulepos, GST_TIME_ARGS (outtime));
+
+        if (need_flush) {
+          GList *walk;
+          GstClockTime patch;
+          gint64 len;
+          gint64 old_granule = dec->granulepos;
+
+          dec->granulepos = -1;
+
+          len = g_list_length (dec->queued);
+
+          GST_DEBUG_OBJECT (dec, "first buffer with granule, flushing");
+
+          /* now resubmit all queued buffers with corrected timestamps */
+          for (walk = dec->queued; walk; walk = g_list_next (walk)) {
+            GstBuffer *qbuffer = GST_BUFFER (walk->data);
+
+            patch = outtime - (GST_SECOND * len * dec->info.fps_denominator) /
+                dec->info.fps_numerator,
+                GST_DEBUG_OBJECT (dec, "patch buffer %lld %lld", len, patch);
+            GST_BUFFER_TIMESTAMP (qbuffer) = patch;
+
+            /* buffers are unreffed in chain function */
+            theora_dec_chain (pad, qbuffer);
+            len--;
+          }
+          g_list_free (dec->queued);
+          dec->queued = NULL;
+
+          dec->granulepos = old_granule;
+        }
+      }
+    } else {
+      GST_DEBUG_OBJECT (dec, "got buffer with timestamp %lld", outtime);
+    }
   } else {
     /* we don't know yet */
     outtime = -1;
@@ -554,7 +638,7 @@ theora_dec_chain (GstPad * pad, GstBuffer * buffer)
   packet.b_o_s = (packet.packetno == 0) ? 1 : 0;
   packet.e_o_s = 0;
 
-  GST_DEBUG_OBJECT (dec, "header=%d packetno=%d, outtime=%" GST_TIME_FORMAT,
+  GST_DEBUG_OBJECT (dec, "header=%d packetno=%lld, outtime=%" GST_TIME_FORMAT,
       packet.packet[0], packet.packetno, GST_TIME_ARGS (outtime));
 
   /* switch depending on packet type */
@@ -682,27 +766,13 @@ theora_dec_chain (GstPad * pad, GstBuffer * buffer)
      * for keyframes */
     keyframe = (packet.packet[0] & 0x40) == 0;
     if (keyframe) {
+      dec->need_keyframe = FALSE;
+#if 0
       guint ilog;
       guint64 framecount;
       gboolean add_one = FALSE;
 
-      dec->need_keyframe = FALSE;
-      ilog = _theora_ilog (dec->info.keyframe_frequency_force - 1);
-      if (dec->granulepos % (1 << ilog) == 0 &&
-          dec->granulepos > 0 && GST_BUFFER_OFFSET_END (buf) == -1) {
-        dec->granulepos--;
-        add_one = TRUE;
-      }
-      framecount = dec->granulepos >> ilog;
-      framecount += dec->granulepos - (framecount << ilog);
-      if (add_one) {
-        framecount++;
-      }
-      dec->granulepos = framecount << ilog;
-      if (add_one) {
-        outtime = GST_SECOND * theora_granule_time (&dec->state,
-            dec->granulepos);
-      }
+#endif
     } else if (dec->need_keyframe) {
       GST_WARNING_OBJECT (dec, "dropping frame because we need a keyframe");
       /* drop frames if we're looking for a keyframe */
@@ -741,6 +811,8 @@ theora_dec_chain (GstPad * pad, GstBuffer * buffer)
      * frame_width, frame_height */
     out = gst_pad_alloc_buffer (dec->srcpad, GST_BUFFER_OFFSET_NONE, out_size,
         GST_PAD_CAPS (dec->srcpad));
+    if (out == NULL)
+      goto done;
 
     /* copy the visible region to the destination. This is actually pretty
      * complicated and gstreamer doesn't support all the needed caps to do this
@@ -792,7 +864,7 @@ theora_dec_chain (GstPad * pad, GstBuffer * buffer)
   }
 done:
   gst_buffer_unref (buffer);
-  dec->granulepos++;
+  _inc_granulepos (dec);
 
   return result;
 }
@@ -810,6 +882,7 @@ theora_dec_change_state (GstElement * element)
       theora_comment_init (&dec->comment);
       dec->need_keyframe = TRUE;
       dec->initialized = FALSE;
+      dec->granulepos = -1;
       break;
     case GST_STATE_PAUSED_TO_PLAYING:
       break;
@@ -820,7 +893,7 @@ theora_dec_change_state (GstElement * element)
       theora_comment_clear (&dec->comment);
       theora_info_clear (&dec->info);
       dec->packetno = 0;
-      dec->granulepos = 0;
+      dec->granulepos = -1;
       break;
     case GST_STATE_READY_TO_NULL:
       break;

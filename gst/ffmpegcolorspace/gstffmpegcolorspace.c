@@ -151,7 +151,6 @@ gst_ffmpegcsp_getcaps (GstPad * pad)
   GstCaps *othercaps;
   GstCaps *caps;
   GstPad *otherpad;
-  GstPad *otherpeer;
 
   space = GST_FFMPEGCSP (GST_PAD_PARENT (pad));
 

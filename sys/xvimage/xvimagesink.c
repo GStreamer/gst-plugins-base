@@ -1357,6 +1357,7 @@ gst_xvimagesink_change_state (GstElement * element)
     case GST_STATE_PAUSED_TO_PLAYING:
       break;
     case GST_STATE_PLAYING_TO_PAUSED:
+      result = GST_STATE_ASYNC;
       break;
     case GST_STATE_PAUSED_TO_READY:
       xvimagesink->framerate = 0;
