@@ -136,8 +136,8 @@ gst_videoscale_base_init (gpointer g_class)
 
   gst_element_class_set_details (element_class, &videoscale_details);
 
-  gst_element_class_add_pad_template (element_class, GST_PAD_TEMPLATE_GET (gst_videoscale_sink_template_factory));
-  gst_element_class_add_pad_template (element_class, GST_PAD_TEMPLATE_GET (gst_videoscale_src_template_factory));
+  gst_element_class_add_pad_template (element_class, gst_videoscale_sink_template_factory());
+  gst_element_class_add_pad_template (element_class, gst_videoscale_src_template_factory());
 }
 static void
 gst_videoscale_class_init (GstVideoscaleClass *klass)
@@ -253,7 +253,7 @@ gst_videoscale_init (GstVideoscale *videoscale)
 {
   GST_DEBUG ("gst_videoscale_init");
   videoscale->sinkpad = gst_pad_new_from_template (
-		  GST_PAD_TEMPLATE_GET (gst_videoscale_sink_template_factory),
+		  gst_videoscale_sink_template_factory(),
 		  "sink");
   gst_element_add_pad(GST_ELEMENT(videoscale),videoscale->sinkpad);
   gst_pad_set_chain_function(videoscale->sinkpad,gst_videoscale_chain);
@@ -261,7 +261,7 @@ gst_videoscale_init (GstVideoscale *videoscale)
   gst_pad_set_getcaps_function(videoscale->sinkpad,gst_videoscale_getcaps);
 
   videoscale->srcpad = gst_pad_new_from_template (
-		  GST_PAD_TEMPLATE_GET (gst_videoscale_src_template_factory),
+		  gst_videoscale_src_template_factory(),
 		  "src");
   gst_element_add_pad(GST_ELEMENT(videoscale),videoscale->srcpad);
   gst_pad_set_link_function(videoscale->srcpad,gst_videoscale_link);

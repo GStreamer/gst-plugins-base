@@ -423,7 +423,7 @@ gst_xvimagesink_get_xv_support (GstXContext *xcontext)
 		      "red_mask", G_TYPE_INT, formats[i].blue_mask,
 		      "width", GST_TYPE_INT_RANGE, 0, G_MAXINT,
 		      "height", GST_TYPE_INT_RANGE, 0, G_MAXINT,
-		      "framerate", GST_TYPE_DOUBLE_RANGE, 0, G_MAXDOUBLE,
+		      "framerate", GST_TYPE_DOUBLE_RANGE, 0.0, G_MAXDOUBLE,
 		      NULL);
                   
                   /* For RGB caps we store them and the image 
@@ -449,7 +449,7 @@ gst_xvimagesink_get_xv_support (GstXContext *xcontext)
 		    "fourcc", GST_TYPE_FOURCC,formats[i].id,
 		    "width", GST_TYPE_INT_RANGE, 0, G_MAXINT,
 		    "height", GST_TYPE_INT_RANGE, 0, G_MAXINT,
-		    "framerate", GST_TYPE_DOUBLE_RANGE, 0, G_MAXDOUBLE,
+		    "framerate", GST_TYPE_DOUBLE_RANGE, 0.0, G_MAXDOUBLE,
 		    NULL);
                 break;
 	      default:

@@ -142,7 +142,7 @@ gst_v4lmjpegsrc_base_init (gpointer g_class)
       GST_STATIC_CAPS ("video/x-jpeg, "
         "width = (int) [ 0, MAX ], "
         "height = (int) [ 0, MAX ], "
-        "framerate = (double) [ 0, MAXDOUBLE ]"
+        "framerate = (double) [ 0, MAX ]"
       )
   );
   GstElementClass *gstelement_class = GST_ELEMENT_CLASS (g_class);
@@ -588,7 +588,7 @@ gst_v4lmjpegsrc_getcaps (GstPad  *pad)
   return gst_caps2_new_simple ("video/x-jpeg",
       "width", GST_TYPE_INT_RANGE, vcap->maxwidth/4, vcap->maxwidth,
       "height", GST_TYPE_INT_RANGE, vcap->maxheight/4, vcap->maxheight,
-      "framerate", GST_TYPE_DOUBLE_RANGE, 0, G_MAXDOUBLE,
+      "framerate", GST_TYPE_DOUBLE_RANGE, 0.0, G_MAXDOUBLE,
       NULL);
 }
 

@@ -126,7 +126,7 @@ videoscale_get_structure (struct videoscale_format_struct *format)
   gst_structure_set(structure,
       "width", GST_TYPE_INT_RANGE, 0, G_MAXINT,
       "height", GST_TYPE_INT_RANGE, 0, G_MAXINT,
-      "framerate", GST_TYPE_DOUBLE_RANGE, 0, G_MAXDOUBLE,
+      "framerate", GST_TYPE_DOUBLE_RANGE, 0.0, G_MAXDOUBLE,
       NULL);
 
   return structure;

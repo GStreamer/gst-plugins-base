@@ -475,10 +475,9 @@ struct fourcc_list_struct * paintrect_find_name (const char *name)
 }
 
 
-GstCaps2 *paint_get_caps(struct fourcc_list_struct *format)
+GstStructure *paint_get_structure(struct fourcc_list_struct *format)
 {
   unsigned int fourcc;
-  GstCaps2 *caps;
 
   g_return_val_if_fail(format, NULL);
 
@@ -492,19 +491,19 @@ GstCaps2 *paint_get_caps(struct fourcc_list_struct *format)
     }else{
       endianness = G_BIG_ENDIAN;
     }
-    caps = gst_caps2_new_simple ("video/x-raw-rgb",
+    return gst_structure_new ("video/x-raw-rgb",
 	"bpp", G_TYPE_INT, format->bitspp,
 	"endianness", G_TYPE_INT, endianness,
 	"depth", G_TYPE_INT, format->depth,
 	"red_mask", G_TYPE_INT, format->red_mask,
 	"green_mask", G_TYPE_INT, format->green_mask,
-	"blue_mask", G_TYPE_INT, format->blue_mask);
+	"blue_mask", G_TYPE_INT, format->blue_mask,
+        NULL);
   }else{
-    caps = gst_caps2_new_simple ("video/x-raw-yuv",
-	"format", GST_TYPE_FOURCC, fourcc);
+    return gst_structure_new ("video/x-raw-yuv",
+	"format", GST_TYPE_FOURCC, fourcc,
+        NULL);
   }
-
-  return caps;
 }
 
 void

@@ -460,7 +460,7 @@ gst_ximagesink_xcontext_get (GstXImageSink *ximagesink)
       "blue_mask",  G_TYPE_INT, GINT_FROM_BE (xcontext->visual->blue_mask),
       "width",      GST_TYPE_INT_RANGE, 0, G_MAXINT,
       "height",     GST_TYPE_INT_RANGE, 0, G_MAXINT,
-      "framerate",  GST_TYPE_DOUBLE_RANGE, 0, G_MAXDOUBLE,
+      "framerate",  GST_TYPE_DOUBLE_RANGE, 0.0, G_MAXDOUBLE,
       NULL);
  
   g_mutex_unlock (ximagesink->x_lock);

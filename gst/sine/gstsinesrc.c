@@ -60,7 +60,7 @@ GST_STATIC_PAD_TEMPLATE (
   GST_PAD_SRC,
   GST_PAD_ALWAYS,
   GST_STATIC_CAPS ("audio/x-raw-int, "
-      "endianness = (int) " G_STRINGIFY(G_BYTE_ORDER) ", "
+      "endianness = (int) BYTE_ORDER, "
       "signed = (boolean) true, "
       "width = (int) 16, "
       "depth = (int) 16, "
@@ -441,7 +441,7 @@ static gboolean
 gst_sinesrc_force_caps (GstSineSrc *src)
 {
   static GstStaticCaps2 static_caps = GST_STATIC_CAPS ("audio/x-raw-int, "
-      "endianness = (int) " G_STRINGIFY(G_BYTE_ORDER) ", "
+      "endianness = (int) BYTE_ORDER, "
       "signed = (boolean) true, "
       "width = (int) 16, "
       "depth = (int) 16, "

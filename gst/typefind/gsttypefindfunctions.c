@@ -406,7 +406,7 @@ mp3_type_find (GstTypeFind *tf, gpointer unused)
 /*** video/mpeg systemstream **************************************************/
 
 static GstStaticCaps2 mpeg_sys_caps = GST_STATIC_CAPS ("video/mpeg, "
-    "systemstream (boolean) true, mpegversion = (int) [ 1, 2 ]");
+    "systemstream = (boolean) true, mpegversion = (int) [ 1, 2 ]");
 #define MPEG_SYS_CAPS gst_caps2_copy(gst_static_caps2_get(&mpeg_sys_caps))
 #define IS_MPEG_HEADER(data)		((((guint8 *)data)[0] == 0x00) &&	\
 					 (((guint8 *)data)[1] == 0x00) &&	\
@@ -567,7 +567,7 @@ mpeg1_sys_type_find (GstTypeFind *tf, gpointer unused)
 /*** video/mpeg video stream **************************************************/
 
 static GstStaticCaps2 mpeg_video_caps = GST_STATIC_CAPS ("video/mpeg, "
-    "systemstream (boolean) false");
+    "systemstream = (boolean) false");
 #define MPEG_VIDEO_CAPS gst_caps2_copy(gst_static_caps2_get(&mpeg_video_caps))
 static void
 mpeg_video_type_find (GstTypeFind *tf, gpointer unused)
@@ -839,14 +839,13 @@ bmp_type_find (GstTypeFind *tf, gpointer unused)
 
 /*** image/tiff ********************/
 static GstStaticCaps2 tiff_caps = GST_STATIC_CAPS ("image/tiff, "
-    "endianness = int { " G_STRINGIFY(G_BIG_ENDIAN) ","
-    G_STRINGIFY(G_LITTLE_ENDIAN) "}" );
+    "endianness = (int) { BIG_ENDIAN, LITTLE_ENDIAN }" );
 #define TIFF_CAPS gst_caps2_copy(gst_static_caps2_get(&tiff_caps))
 static GstStaticCaps2 tiff_be_caps = GST_STATIC_CAPS ("image/tiff, "
-    "endianness = int " G_STRINGIFY(G_BIG_ENDIAN));
+    "endianness = (int) BIG_ENDIAN");
 #define TIFF_BE_CAPS gst_caps2_copy(gst_static_caps2_get(&tiff_be_caps))
 static GstStaticCaps2 tiff_le_caps = GST_STATIC_CAPS ("image/tiff, "
-    "endianness = int " G_STRINGIFY(G_LITTLE_ENDIAN));
+    "endianness = (int) LITTLE_ENDIAN");
 #define TIFF_LE_CAPS gst_caps2_copy(gst_static_caps2_get(&tiff_le_caps))
 static void
 tiff_type_find (GstTypeFind *tf, gpointer ununsed)
