@@ -453,13 +453,16 @@ gst_alsa_get_caps_internal (snd_pcm_format_t format)
 
     return gst_caps2_new_simple ("audio/x-raw-float",
 	    "width",      G_TYPE_INT, (gint) snd_pcm_format_width (format),
-	    "endianness", G_TYPE_INT, G_BYTE_ORDER);
+	    "endianness", G_TYPE_INT, G_BYTE_ORDER,
+            NULL);
   }
   return NULL;
 }
 
 static inline void
-add_channels (GstStructure *structure, gint min_rate, gint max_rate, gint min_channels, gint max_channels) {
+add_channels (GstStructure *structure, gint min_rate, gint max_rate,
+    gint min_channels, gint max_channels)
+{
   if (min_rate < 0) {
     min_rate = GST_ALSA_MIN_RATE;
     max_rate = GST_ALSA_MAX_RATE;
@@ -467,7 +470,8 @@ add_channels (GstStructure *structure, gint min_rate, gint max_rate, gint min_ch
   if (max_rate < 0) {
     gst_structure_set (structure, "rate", G_TYPE_INT, min_rate, NULL);
   } else {
-    gst_structure_set (structure, "rate", GST_TYPE_INT_RANGE, min_rate, max_rate);
+    gst_structure_set (structure, "rate", GST_TYPE_INT_RANGE, min_rate,
+        max_rate, NULL);
   }
   if (min_channels < 0) {
     min_channels = 1;
@@ -476,7 +480,8 @@ add_channels (GstStructure *structure, gint min_rate, gint max_rate, gint min_ch
   if (max_channels < 0) {
     gst_structure_set (structure, "channels", G_TYPE_INT, min_channels, NULL);
   } else {
-    gst_structure_set (structure, "channels", GST_TYPE_INT_RANGE, min_channels, max_channels);
+    gst_structure_set (structure, "channels", GST_TYPE_INT_RANGE,
+        min_channels, max_channels, NULL);
   }
 }
 
@@ -489,7 +494,7 @@ add_channels (GstStructure *structure, gint min_rate, gint max_rate, gint min_ch
 GstCaps2 *
 gst_alsa_caps (snd_pcm_format_t format, gint rate, gint channels)
 {
-  GstCaps2 *ret_caps = NULL;
+  GstCaps2 *ret_caps;
 
   if (format != SND_PCM_FORMAT_UNKNOWN) {
     /* there are some caps set already */
@@ -504,6 +509,7 @@ gst_alsa_caps (snd_pcm_format_t format, gint rate, gint channels)
     int i;
     GstCaps2 *temp;
 
+    ret_caps = gst_caps2_new_empty ();
     for (i = 0; i <= SND_PCM_FORMAT_LAST; i++) {
       temp = gst_alsa_get_caps_internal (i);
 

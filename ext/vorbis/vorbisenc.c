@@ -160,10 +160,10 @@ gst_vorbisenc_base_init (gpointer g_class)
 
   gst_vorbisenc_sink_template = gst_pad_template_new ("sink", GST_PAD_SINK, 
 		                                      GST_PAD_ALWAYS, 
-					              raw_caps, NULL);
+					              raw_caps);
   gst_vorbisenc_src_template = gst_pad_template_new ("src", GST_PAD_SRC, 
 		                                     GST_PAD_ALWAYS, 
-					             vorbis_caps, NULL);
+					             vorbis_caps);
   gst_element_class_add_pad_template (element_class, gst_vorbisenc_sink_template);
   gst_element_class_add_pad_template (element_class, gst_vorbisenc_src_template);
   gst_element_class_set_details (element_class, &vorbisenc_details);
