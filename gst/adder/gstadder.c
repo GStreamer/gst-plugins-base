@@ -572,7 +572,8 @@ gst_adder_change_state (GstElement *element)
       break;
     case GST_STATE_PLAYING_TO_PAUSED:
       if (adder->bufpool) {
-	gst_buffer_pool_unref (adder->bufpool);
+        /* since we never ref it, unreffing is a mistake.  This needs fixing */
+	/* gst_buffer_pool_unref (adder->bufpool); */
 	adder->bufpool = NULL;
       }
       break;
