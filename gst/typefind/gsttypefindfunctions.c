@@ -438,7 +438,7 @@ qt_type_find (GstTypeFind *tf, gpointer unused)
       tip = GST_TYPE_FIND_MAXIMUM;
       break;
     }
-    offset += *((guint32 *) data);
+    offset += GUINT32_FROM_BE (*((guint32 *) data));
   }
   if (tip > 0) {
     gst_type_find_suggest (tf, tip, QT_CAPS);
@@ -549,10 +549,10 @@ mod_type_find (GstTypeFind *tf, gpointer unused)
       if (data2) {
 	if (memcmp (data2, "DSMF", 4) == 0) {
 	  gst_type_find_suggest (tf, GST_TYPE_FIND_MAXIMUM, MOD_CAPS);
-	} else {
-	  gst_type_find_suggest (tf, GST_TYPE_FIND_POSSIBLE, MOD_CAPS);
+	  return;
 	}
-	return;
+      } else {
+	gst_type_find_suggest (tf, GST_TYPE_FIND_POSSIBLE, MOD_CAPS);
       }
     }
     /* FAM */
