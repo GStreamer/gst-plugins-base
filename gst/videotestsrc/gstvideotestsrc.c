@@ -74,14 +74,16 @@ static GstData *gst_videotestsrc_get (GstPad * pad);
 static GstElementClass *parent_class = NULL;
 
 static GstCaps2 * gst_videotestsrc_get_capslist (void);
+#if 0
 static GstCaps2 * gst_videotestsrc_get_capslist_size (int width, int height, double rate);
+#endif
 
 
 static GstPadTemplate *
 gst_videotestsrc_src_template_factory(void)
 {
   return gst_pad_template_new ("src", GST_PAD_SRC, GST_PAD_ALWAYS,
-      gst_videotestsrc_get_capslist_size(0,0,0.0));
+      gst_videotestsrc_get_capslist());
 }
 
 GType
@@ -299,12 +301,17 @@ gst_videotestsrc_get_capslist (void)
   caps = gst_caps2_new_empty();
   for(i=0;i<n_fourccs;i++){
     structure = paint_get_structure (fourcc_list + i);
+    gst_structure_set(structure,
+	"width", GST_TYPE_INT_RANGE, 1, G_MAXINT,
+	"height", GST_TYPE_INT_RANGE, 1, G_MAXINT,
+	"framerate", GST_TYPE_DOUBLE_RANGE, 0.0, G_MAXDOUBLE, NULL);
     gst_caps2_append_cap (caps, structure);
   }
 
   return caps;
 }
 
+#if 0
 static GstCaps2 *
 gst_videotestsrc_get_capslist_size (int width, int height, double rate)
 {
@@ -324,6 +331,7 @@ gst_videotestsrc_get_capslist_size (int width, int height, double rate)
 
   return caps;
 }
+#endif
 
 static GstCaps2 *
 gst_videotestsrc_getcaps (GstPad * pad)
