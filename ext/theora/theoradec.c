@@ -408,9 +408,7 @@ theora_dec_src_query (GstPad * pad, GstQueryType query, GstFormat * format,
     granulepos = dec->granulepos;
   } else {
     /* for the total, we just forward the query to the peer */
-    if (!gst_pad_query (GST_PAD_PEER (dec->sinkpad), query, &my_format,
-            &granulepos))
-      return FALSE;
+    return gst_pad_query (GST_PAD_PEER (dec->sinkpad), query, format, value);
   }
 
   /* and convert to the final format in two steps with time as the 
@@ -482,7 +480,7 @@ theora_dec_src_event (GstPad * pad, GstEvent * event)
 static gboolean
 theora_dec_sink_event (GstPad * pad, GstEvent * event)
 {
-  guint64 value, time, bytes;
+  guint64 start_value, end_value, time, bytes;
   GstTheoraDec *dec;
 
   dec = GST_THEORA_DEC (GST_PAD_PARENT (pad));
@@ -490,11 +488,12 @@ theora_dec_sink_event (GstPad * pad, GstEvent * event)
   GST_LOG_OBJECT (dec, "handling event");
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_DISCONTINUOUS:
-      if (gst_event_discont_get_value (event, GST_FORMAT_DEFAULT, &value)) {
-        dec->granulepos = value;
+      if (gst_event_discont_get_value (event, GST_FORMAT_DEFAULT,
+              &start_value, &end_value)) {
+        dec->granulepos = start_value;
         GST_DEBUG_OBJECT (dec,
             "setting granuleposition to %" G_GUINT64_FORMAT " after discont",
-            value);
+            start_value);
       } else {
         GST_WARNING_OBJECT (dec,
             "discont event didn't include offset, we might set it wrong now");
@@ -518,14 +517,15 @@ theora_dec_sink_event (GstPad * pad, GstEvent * event)
         if (theora_dec_sink_convert (dec->sinkpad, GST_FORMAT_DEFAULT,
                 dec->granulepos, &time_format, &time)
             && theora_dec_src_convert (dec->srcpad, GST_FORMAT_TIME, time,
-                &default_format, &value)
+                &default_format, &start_value)
             && theora_dec_src_convert (dec->srcpad, GST_FORMAT_TIME, time,
                 &bytes_format, &bytes)) {
           gst_pad_push_event (dec->srcpad,
               gst_event_new_discontinuous (FALSE, GST_FORMAT_TIME,
-                  time, GST_FORMAT_DEFAULT, value, GST_FORMAT_BYTES, bytes, 0));
+                  time, GST_FORMAT_DEFAULT, start_value, GST_FORMAT_BYTES,
+                  bytes, 0));
           /* store new framenumber */
-          dec->packetno = value + 3;
+          dec->packetno = start_value + 3;
         } else {
           GST_ERROR_OBJECT (dec,
               "failed to parse data for DISCONT event, not sending any");

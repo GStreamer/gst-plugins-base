@@ -427,23 +427,18 @@ gst_ogg_mux_next_buffer (GstOggPad * pad, gboolean * interrupt)
           pad->eos = TRUE;
           gst_event_unref (event);
           return NULL;
-          //case GST_EVENT_INTERRUPT:
-          //  *interrupt = TRUE;
-          //  return NULL;
         case GST_EVENT_DISCONTINUOUS:
         {
-          guint64 value;
+          guint64 start_value, end_value;
 
-          if (GST_EVENT_DISCONT_NEW_MEDIA (event)) {
-            gst_pad_event_default (pad->pad, event);
-            break;
-          }
-          if (gst_event_discont_get_value (event, GST_FORMAT_TIME, &value)) {
+          if (gst_event_discont_get_value (event, GST_FORMAT_TIME,
+                  &start_value, &end_value)) {
             GST_DEBUG_OBJECT (ogg_mux,
-                "got discont of %" G_GUINT64_FORMAT " on pad %s:%s",
-                value, GST_DEBUG_PAD_NAME (pad->pad));
+                "got discont of %" G_GUINT64_FORMAT " and %" G_GUINT64_FORMAT
+                " on pad %s:%s", start_value, end_value,
+                GST_DEBUG_PAD_NAME (pad->pad));
           }
-          pad->offset = value;
+          pad->offset = start_value;
           gst_event_unref (event);
 
         }

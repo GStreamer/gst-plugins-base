@@ -239,16 +239,12 @@ vorbis_dec_src_query (GstPad * pad, GstQueryType query, GstFormat * format,
 {
   gint64 granulepos = 0;
   GstVorbisDec *dec = GST_VORBIS_DEC (gst_pad_get_parent (pad));
-  GstFormat my_format = GST_FORMAT_DEFAULT;
 
   if (query == GST_QUERY_POSITION) {
     granulepos = dec->granulepos;
   } else {
     /* query peer in default format */
-    if (!dec->sinkpad ||
-        !gst_pad_query (GST_PAD_PEER (dec->sinkpad), query, &my_format,
-            &granulepos))
-      return FALSE;
+    return gst_pad_query (GST_PAD_PEER (dec->sinkpad), query, format, value);
   }
 
   /* and convert to the final format */
@@ -270,16 +266,15 @@ vorbis_dec_src_event (GstPad * pad, GstEvent * event)
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_SEEK:{
       guint64 value;
-      GstFormat my_format = GST_FORMAT_DEFAULT;
+      GstFormat my_format = GST_FORMAT_TIME;
 
-      /* convert to granulepos */
-      res = vorbis_dec_convert (pad, GST_EVENT_SEEK_FORMAT (event),
+      /* convert to time */
+      res = gst_pad_convert (pad, GST_EVENT_SEEK_FORMAT (event),
           GST_EVENT_SEEK_OFFSET (event), &my_format, &value);
       if (res) {
         GstEvent *real_seek = gst_event_new_seek (
             (GST_EVENT_SEEK_TYPE (event) & ~GST_SEEK_FORMAT_MASK) |
-            GST_FORMAT_DEFAULT,
-            value);
+            GST_FORMAT_TIME, value);
 
         res = gst_pad_send_event (GST_PAD_PEER (dec->sinkpad), real_seek);
       }
@@ -297,7 +292,7 @@ vorbis_dec_src_event (GstPad * pad, GstEvent * event)
 static gboolean
 vorbis_dec_sink_event (GstPad * pad, GstEvent * event)
 {
-  guint64 value, time, bytes;
+  guint64 start_value, end_value, time, bytes;
   gboolean ret = TRUE;
   GstVorbisDec *dec;
 
@@ -307,11 +302,11 @@ vorbis_dec_sink_event (GstPad * pad, GstEvent * event)
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_DISCONTINUOUS:
       if (gst_event_discont_get_value (event, GST_FORMAT_DEFAULT,
-              (gint64 *) & value)) {
-        dec->granulepos = value;
+              (gint64 *) & start_value, &end_value)) {
+        dec->granulepos = start_value;
         GST_DEBUG_OBJECT (dec,
             "setting granuleposition to %" G_GUINT64_FORMAT " after discont",
-            value);
+            start_value);
       } else {
         GST_WARNING_OBJECT (dec,
             "discont event didn't include offset, we might set it wrong now");

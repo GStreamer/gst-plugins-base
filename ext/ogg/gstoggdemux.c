@@ -73,6 +73,14 @@ typedef struct _GstOggChain
   gboolean have_bos;
 
   GArray *streams;
+
+  GstClockTime total_time;      /* the total time of this chain, this is the MAX of
+                                   the totals of all streams */
+  GstClockTime start_time;      /* the timestamp of the first sample */
+  GstClockTime last_time;       /* the timestamp of the last page == last sample */
+
+  GstClockTime begin_time;      /* when this chain starts in the stream */
+
 } GstOggChain;
 
 /* different modes for the pad */
@@ -102,13 +110,15 @@ struct _GstOggPad
 
   gint64 current_granule;
 
-  GstClockTime start_timestamp; /* the timestamp of the first sample */
+  GstClockTime start_time;      /* the timestamp of the first sample */
 
   gint64 first_granule;         /* the granulepos of first page == first sample in next page */
-  GstClockTime first_timestamp; /* the timestamp of the second page */
+  GstClockTime first_time;      /* the timestamp of the second page */
 
-  GstClockTime last_timestamp;  /* the timestamp of the last page == last sample */
+  GstClockTime last_time;       /* the timestamp of the last page == last sample */
   gint64 last_granule;          /* the granulepos of the last page */
+
+  GstClockTime total_time;      /* the total time of this stream */
 
   ogg_stream_state stream;
 };
@@ -139,6 +149,8 @@ struct _GstOggDemux
   /* state */
   GArray *chains;               /* list of chains we know */
 
+  GstClockTime total_time;      /* the total time of this ogg, this is the sum of
+                                   the totals of all chains */
   GstOggChain *current_chain;
   GstOggChain *building_chain;
 
@@ -214,16 +226,17 @@ gst_ogg_pad_init (GstOggPad * pad)
   pad->last_granule = -1;
   pad->current_granule = -1;
 
-  pad->start_timestamp = -1;
-  pad->first_timestamp = -1;
-  pad->last_timestamp = -1;
+  pad->start_time = -1;
+  pad->first_time = -1;
+  pad->last_time = -1;
 }
 
 static const GstFormat *
 gst_ogg_pad_formats (GstPad * pad)
 {
   static GstFormat src_formats[] = {
-    GST_FORMAT_DEFAULT,         /* granulepos */
+    GST_FORMAT_DEFAULT,         /* time */
+    GST_FORMAT_TIME,            /* granulepos */
     0
   };
   static GstFormat sink_formats[] = {
@@ -250,8 +263,6 @@ static const GstQueryType *
 gst_ogg_pad_query_types (GstPad * pad)
 {
   static const GstQueryType query_types[] = {
-    GST_QUERY_START,
-    GST_QUERY_SEGMENT_END,
     GST_QUERY_POSITION,
     GST_QUERY_TOTAL,
     0
@@ -287,17 +298,11 @@ gst_ogg_pad_src_query (GstPad * pad, GstQueryType type,
   cur = GST_OGG_PAD (pad);
 
   switch (type) {
-    case GST_QUERY_START:
-      *value = cur->first_granule;
-      break;
-    case GST_QUERY_SEGMENT_END:
-      *value = cur->last_granule;
-      break;
     case GST_QUERY_POSITION:
       *value = cur->current_granule;
       break;
     case GST_QUERY_TOTAL:
-      *value = cur->last_granule;
+      *value = ogg->total_time;
       break;
     default:
       res = FALSE;
@@ -319,13 +324,26 @@ gst_ogg_pad_event (GstPad * pad, GstEvent * event)
 
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_SEEK:
+    {
+      gint64 offset;
+
+      /* can't seek if we are not seekable */
       if (!ogg->seekable) {
         res = FALSE;
         goto done_unref;
       }
-      res = gst_ogg_demux_perform_seek (ogg, 100);
+      /* we can only seek on time */
+      if (GST_EVENT_SEEK_FORMAT (event) != GST_FORMAT_TIME) {
+        res = FALSE;
+        goto done_unref;
+      }
+      offset = GST_EVENT_SEEK_OFFSET (event);
       gst_event_unref (event);
+
+      /* now do the seek */
+      res = gst_ogg_demux_perform_seek (ogg, offset);
       break;
+    }
     default:
       res = gst_pad_event_default (pad, event);
       break;
@@ -431,8 +449,8 @@ gst_ogg_pad_internal_chain (GstPad * pad, GstBuffer * buffer)
   GST_DEBUG_OBJECT (oggpad, "received buffer from iternal pad, TS=%lld",
       timestamp);
 
-  if (oggpad->start_timestamp == -1)
-    oggpad->start_timestamp = timestamp;
+  if (oggpad->start_time == -1)
+    oggpad->start_time = timestamp;
 
   return GST_FLOW_OK;
 }
@@ -533,7 +551,7 @@ gst_ogg_pad_submit_packet (GstOggPad * pad, ogg_packet * packet)
       pad->first_granule = granule;
     }
   }
-  /* first packet */
+  /* first packet, FIXME, do this in chain activation */
   if (pad->packetno == 0) {
     gst_ogg_pad_typefind (pad, packet);
     if (pad->mode == GST_OGG_PAD_MODE_STREAMING) {
@@ -555,7 +573,6 @@ gst_ogg_pad_submit_packet (GstOggPad * pad, ogg_packet * packet)
       ret = gst_pad_push (GST_PAD (pad), buf);
     }
   } else {
-
     /* initialize our internal decoder with packets */
     GST_DEBUG_OBJECT (ogg,
         "%p init decoder serial %08lx, packetno %lld", pad, pad->serialno,
@@ -1001,23 +1018,43 @@ gst_ogg_demux_perform_seek (GstOggDemux * ogg, gint64 pos)
 {
   GstOggChain *chain = NULL;
   gint64 begin, end;
-  gint64 beginpos, endpos;
+  gint64 begintime, endtime;
+  gint64 target;
   gint64 best;
   gint64 total;
   gint64 result = 0;
   gint i;
 
-  for (i = 0; i < ogg->chains->len; i++) {
+  total = ogg->total_time;
+
+  /* can't seek past start or end */
+  if (pos < 0 || pos > total)
+    return FALSE;
+
+  /* first find the chain to search in */
+  for (i = ogg->chains->len - 1; i >= 0; i--) {
     chain = g_array_index (ogg->chains, GstOggChain *, i);
-    break;
+    total -= chain->total_time;
+    if (pos >= total)
+      break;
   }
 
   begin = chain->offset;
   end = chain->end_offset;
-  beginpos = 0;
-  endpos = 1000;
+  begintime = chain->begin_time;
+  endtime = chain->begin_time + chain->total_time;
+  target = pos - total + begintime;
   best = begin;
-  total = end - begin;
+
+  GST_DEBUG_OBJECT (ogg, "seeking to %" GST_TIME_FORMAT " in chain %p",
+      GST_TIME_ARGS (pos), chain);
+  GST_DEBUG_OBJECT (ogg,
+      "chain offset %" G_GINT64_FORMAT ", end offset %" G_GINT64_FORMAT, begin,
+      end);
+  GST_DEBUG_OBJECT (ogg,
+      "chain begin time %" GST_TIME_FORMAT ", end time %" GST_TIME_FORMAT,
+      GST_TIME_ARGS (begintime), GST_TIME_ARGS (endtime));
+  GST_DEBUG_OBJECT (ogg, "target %" GST_TIME_FORMAT, GST_TIME_ARGS (target));
 
   /* make sure our streaming thread is not running */
 
@@ -1030,16 +1067,20 @@ gst_ogg_demux_perform_seek (GstOggDemux * ogg, gint64 pos)
     } else {
       /* take a (pretty decent) guess. */
       bisect = begin +
-          (pos - beginpos) * (end - begin) / (endpos - beginpos) - CHUNKSIZE;
+          (target - begintime) * (end - begin) / (endtime - begintime) -
+          CHUNKSIZE;
 
       if (bisect <= begin)
         bisect = begin + 1;
     }
-
     gst_ogg_demux_seek (ogg, bisect);
 
     while (begin < end) {
       ogg_page og;
+
+      GST_DEBUG_OBJECT (ogg,
+          "after seek, bisect %" G_GINT64_FORMAT ", begin %" G_GINT64_FORMAT
+          ", end %" G_GINT64_FORMAT, bisect, begin, end);
 
       result = gst_ogg_demux_get_next_page (ogg, &og, end - ogg->offset);
       if (result == OV_EREAD)
@@ -1060,17 +1101,31 @@ gst_ogg_demux_perform_seek (GstOggDemux * ogg, gint64 pos)
         }
       } else {
         gint64 granulepos;
+        GstClockTime granuletime;
+        GstFormat format = GST_FORMAT_TIME;
+        GstOggPad *pad;
 
         granulepos = ogg_page_granulepos (&og);
         if (granulepos == -1)
           continue;
 
-        if (granulepos < pos) {
+        pad = gst_ogg_chain_get_stream (chain, ogg_page_serialno (&og));
+        if (pad == NULL)
+          continue;
+
+        gst_pad_convert (pad->elem_pad,
+            GST_FORMAT_DEFAULT, granulepos, &format, &granuletime);
+
+        GST_DEBUG_OBJECT (ogg,
+            "found page with granule %" G_GINT64_FORMAT " and time %"
+            GST_TIME_FORMAT, granulepos, GST_TIME_ARGS (granuletime));
+
+        if (granuletime < target) {
           best = result;        /* raw offset of packet with granulepos */
           begin = ogg->offset;  /* raw offset of next page */
-          beginpos = granulepos;
+          begintime = granuletime;
 
-          if (pos - beginpos > 44100)
+          if (target - begintime > GST_SECOND)
             break;
 
           bisect = begin;       /* *not* begin + 1 */
@@ -1086,7 +1141,7 @@ gst_ogg_demux_perform_seek (GstOggDemux * ogg, gint64 pos)
               gst_ogg_demux_seek (ogg, bisect);
             } else {
               end = result;
-              endpos = granulepos;
+              endtime = granuletime;
               break;
             }
           }
@@ -1094,6 +1149,8 @@ gst_ogg_demux_perform_seek (GstOggDemux * ogg, gint64 pos)
       }
     }
   }
+  /* FIXME, switch to different chain */
+
   return TRUE;
 
 seek_error:
@@ -1239,7 +1296,7 @@ gst_ogg_demux_read_chain (GstOggDemux * ogg)
         gst_ogg_pad_submit_page (pad, &op);
       }
       /* the timestamp will be filled in when we submit the pages */
-      done &= (pad->start_timestamp != -1);
+      done &= (pad->start_time != -1);
       GST_LOG_OBJECT (ogg, "done %08lx now %d", serial, done);
     }
 
@@ -1249,14 +1306,14 @@ gst_ogg_demux_read_chain (GstOggDemux * ogg)
         break;
     }
   }
-  GST_LOG_OBJECT (ogg, "done reading chains");
+  GST_LOG_OBJECT (ogg, "done reading chain");
   /* now we can fill in the missing info using queries */
   for (i = 0; i < chain->streams->len; i++) {
     GstOggPad *pad = g_array_index (chain->streams, GstOggPad *, i);
     GstFormat target = GST_FORMAT_TIME;
 
     gst_pad_convert (pad->elem_pad,
-        GST_FORMAT_DEFAULT, pad->first_granule, &target, &pad->first_timestamp);
+        GST_FORMAT_DEFAULT, pad->first_granule, &target, &pad->first_time);
 
     pad->mode = GST_OGG_PAD_MODE_STREAMING;
     pad->packetno = 0;
@@ -1317,7 +1374,7 @@ gst_ogg_demux_read_end_chain (GstOggDemux * ogg, GstOggChain * chain)
     GstFormat target = GST_FORMAT_TIME;
 
     gst_pad_convert (pad->elem_pad,
-        GST_FORMAT_DEFAULT, pad->last_granule, &target, &pad->last_timestamp);
+        GST_FORMAT_DEFAULT, pad->last_granule, &target, &pad->last_time);
   }
   return 0;
 }
@@ -1387,6 +1444,32 @@ gst_ogg_demux_find_chains (GstOggDemux * ogg)
     gst_ogg_demux_bisect_forward_serialno (ogg, 0, ogg->length, ogg->length,
         chain, 0);
   }
+  /* collect all info */
+  {
+    gint i, j;
+
+    ogg->total_time = 0;
+
+    for (i = 0; i < ogg->chains->len; i++) {
+      GstOggChain *chain = g_array_index (ogg->chains, GstOggChain *, i);
+
+      chain->total_time = 0;
+      chain->start_time = 0;
+      chain->last_time = 0;
+      chain->begin_time = ogg->total_time;
+
+      for (j = 0; j < chain->streams->len; j++) {
+        GstOggPad *pad = g_array_index (chain->streams, GstOggPad *, j);
+
+        pad->total_time = pad->last_time - pad->start_time;
+        chain->total_time = MAX (chain->total_time, pad->total_time);
+        chain->start_time = MIN (chain->start_time, pad->start_time);
+        chain->last_time = MAX (chain->last_time, pad->last_time);
+      }
+      ogg->total_time += chain->total_time;
+    }
+  }
+
   /* now dump our chains and streams */
   gst_ogg_print (ogg);
 
@@ -1695,25 +1778,34 @@ gst_ogg_print (GstOggDemux * ogg)
 {
   guint j, i;
 
+  GST_INFO_OBJECT (ogg, "%u chains, total time %" GST_TIME_FORMAT ":",
+      ogg->chains->len, GST_TIME_ARGS (ogg->total_time));
+
   for (i = 0; i < ogg->chains->len; i++) {
     GstOggChain *chain = g_array_index (ogg->chains, GstOggChain *, i);
 
-    GST_INFO_OBJECT (ogg, "chain %d (%u streams):", i, chain->streams->len);
-    GST_INFO_OBJECT (ogg, " offset: %" G_GINT64_FORMAT " - %" G_GINT64_FORMAT,
+    GST_INFO_OBJECT (ogg, " chain %d (%u streams):", i, chain->streams->len);
+    GST_INFO_OBJECT (ogg, "  offset: %" G_GINT64_FORMAT " - %" G_GINT64_FORMAT,
         chain->offset, chain->end_offset);
+    GST_INFO_OBJECT (ogg, "  total time: %" GST_TIME_FORMAT,
+        GST_TIME_ARGS (chain->total_time));
 
     for (j = 0; j < chain->streams->len; j++) {
       GstOggPad *stream = g_array_index (chain->streams, GstOggPad *, j);
 
       GST_INFO_OBJECT (ogg, "  stream %08lx:", stream->serialno);
-      GST_INFO_OBJECT (ogg, "    start timestamp %lld:",
-          stream->start_timestamp);
-      GST_INFO_OBJECT (ogg, "    first granulepos %lld:",
+      GST_INFO_OBJECT (ogg, "   start time       %" GST_TIME_FORMAT ":",
+          GST_TIME_ARGS (stream->start_time));
+      GST_INFO_OBJECT (ogg, "   first granulepos %" G_GINT64_FORMAT ":",
           stream->first_granule);
-      GST_INFO_OBJECT (ogg, "    first timestamp %lld:",
-          stream->first_timestamp);
-      GST_INFO_OBJECT (ogg, "    last granulepos %lld:", stream->last_granule);
-      GST_INFO_OBJECT (ogg, "    last timestamp %lld:", stream->last_timestamp);
+      GST_INFO_OBJECT (ogg, "   first time       %" GST_TIME_FORMAT ":",
+          GST_TIME_ARGS (stream->first_time));
+      GST_INFO_OBJECT (ogg, "   last granulepos  %" G_GINT64_FORMAT ":",
+          stream->last_granule);
+      GST_INFO_OBJECT (ogg, "   last time        %" GST_TIME_FORMAT ":",
+          GST_TIME_ARGS (stream->last_time));
+      GST_INFO_OBJECT (ogg, "   total time       %" GST_TIME_FORMAT ":",
+          GST_TIME_ARGS (stream->total_time));
     }
   }
 }
