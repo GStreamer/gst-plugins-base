@@ -542,8 +542,8 @@ gst_vorbisfile_loop (GstElement *element)
      * by avoiding headers and stuff */
      time_total = ov_time_total (vf, link);
     raw_total = ov_raw_total (vf, link);
-    g_print ("total time: %f\n", time_total);
-    g_print ("abr: %d\n", 
+    GST_DEBUG (0,"total time: %f\n", time_total);
+    GST_DEBUG (0,"abr: %d\n", 
 	     (gint) ((guint64) raw_total / (guint64) time_total) * 8);
     vi = ov_info (vf, link);
     vorbisfile->version = vi->version;
@@ -552,9 +552,9 @@ gst_vorbisfile_loop (GstElement *element)
     vorbisfile->bitrate_upper = vi->bitrate_upper;
     vorbisfile->bitrate_nominal = vi->bitrate_nominal;
     vorbisfile->bitrate_lower = vi->bitrate_lower;
-    g_print ("Bitstream is %d channel, %ld Hz, %d version, %ld bitrate\n", 
+    GST_DEBUG (0,"Bitstream is %d channel, %ld Hz, %d version, %ld bitrate\n", 
 	     vi->channels, vi->rate, vi->version, vorbisfile->bitrate);
-    g_print ("bitrate: %f\n", (double) vorbisfile->bitrate);
+    GST_DEBUG (0,"bitrate: %f\n", (double) vorbisfile->bitrate);
     /* fire the signal saying we have metadata */
     g_signal_emit (G_OBJECT(vorbisfile), 
 		   gst_vorbisfile_signals[SIGNAL_HAVE_METADATA], 0);
