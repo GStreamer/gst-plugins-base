@@ -2,13 +2,7 @@ plugindir = $(libdir)/gstreamer-@GST_MAJORMINOR@
 
 plugin_LTLIBRARIES = libgstvideoscale.la
 
-if HAVE_CPU_I386
-ARCHSRCS = \
-	videoscale_x86.c \
-	videoscale_x86_asm.s
-else
 ARCHSRCS =
-endif
 
 libgstvideoscale_la_SOURCES = \
 			gstvideoscale.c \
