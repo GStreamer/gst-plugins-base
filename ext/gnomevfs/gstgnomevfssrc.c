@@ -846,6 +846,7 @@ static GstBuffer *gst_gnomevfssrc_get(GstPad *pad)
 	GnomeVFSResult result = 0;
 	GstBuffer *buf;
 	GnomeVFSFileSize readbytes;
+	guint8 *data;
 
 	g_return_val_if_fail(pad != NULL, NULL);
 	src = GST_GNOMEVFSSRC(gst_pad_get_parent(pad));
@@ -869,14 +870,14 @@ static GstBuffer *gst_gnomevfssrc_get(GstPad *pad)
 	if (src->iradio_mode && src->icy_metaint > 0) {
 		GST_BUFFER_DATA (buf) = g_malloc0 (src->icy_metaint);
 		g_return_val_if_fail (GST_BUFFER_DATA (buf) != NULL, NULL);
-
+		data = GST_BUFFER_DATA (buf);
 		GST_BUFFER_SIZE (buf) = 0;
 		/* FIXME GROSS HACK: We try to read in at least 8000
 		 * bytes of data so that mp3 typefinding will work. */
 		do
 		{
 			GST_DEBUG (0,"doing read: icy_count: %Lu", src->icy_count);
-			result = gnome_vfs_read (src->handle, GST_BUFFER_DATA (buf),
+			result = gnome_vfs_read (src->handle, data,
 						 src->icy_metaint - src->icy_count,
 						 &readbytes);
 
@@ -892,15 +893,16 @@ static GstBuffer *gst_gnomevfssrc_get(GstPad *pad)
 			GST_BUFFER_OFFSET (buf) = src->curoffset;
 			GST_BUFFER_SIZE (buf) += readbytes;
 			src->curoffset += readbytes;
+			data += readbytes;
 			
 			if (src->icy_count == src->icy_metaint) {
 				gst_gnomevfssrc_get_icy_metadata (src);
 				src->icy_count = 0;
 			}
-			src->in_first_get = FALSE;
 		} while (src->in_first_get
 			 && GST_BUFFER_OFFSET (buf) < 8000 &&
 			 src->icy_metaint - src->icy_count >= 8000);
+		src->in_first_get = FALSE;
 	} else {
 		/* allocate the space for the buffer data */
 		GST_BUFFER_DATA(buf) = g_malloc(src->bytes_per_read);
@@ -942,7 +944,7 @@ static GstBuffer *gst_gnomevfssrc_get(GstPad *pad)
 	}
 
 	GST_BUFFER_TIMESTAMP (buf) = -1;
-	src->in_first_get = FALSE;
+
 	/* we're done, return the buffer */
 	return buf;
 }
