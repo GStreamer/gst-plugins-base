@@ -129,38 +129,31 @@ vorbisenc_get_type (void)
   return vorbisenc_type;
 }
 
-static GstCaps*
+static GstCaps2*
 vorbis_caps_factory (void)
 {
-  return
-   gst_caps_new (
-  	"vorbis_vorbis",
-  	"application/ogg",
-  	NULL);
+  return gst_caps2_new_simple ("application/ogg", NULL);
 }
 
-static GstCaps*
+static GstCaps2*
 raw_caps_factory (void)
 {
   return
-   gst_caps_new (
-  	"vorbis_raw",
-  	"audio/x-raw-int",
-	gst_props_new (
-    	    "endianness", 	GST_PROPS_INT (G_BYTE_ORDER),
-    	    "signed", 		GST_PROPS_BOOLEAN (TRUE),
-    	    "width", 		GST_PROPS_INT (16),
-    	    "depth",    	GST_PROPS_INT (16),
-    	    "rate",     	GST_PROPS_INT_RANGE (11025, 48000),
-    	    "channels", 	GST_PROPS_INT_RANGE (1, 2),
-	    NULL));
+   gst_caps2_new_simple ("audio/x-raw-int",
+       "endianness", 	G_TYPE_INT, G_BYTE_ORDER,
+       "signed", 	G_TYPE_BOOLEAN, TRUE,
+       "width", 	G_TYPE_INT, 16,
+       "depth",    	G_TYPE_INT, 16,
+       "rate",     	GST_TYPE_INT_RANGE, 11025, 48000,
+       "channels", 	GST_TYPE_INT_RANGE, 1, 2,
+       NULL);
 }
 
 static void
 gst_vorbisenc_base_init (gpointer g_class)
 {
   GstElementClass *element_class = GST_ELEMENT_CLASS (g_class);
-  GstCaps *raw_caps, *vorbis_caps;
+  GstCaps2 *raw_caps, *vorbis_caps;
 
   raw_caps = raw_caps_factory ();
   vorbis_caps = vorbis_caps_factory ();
@@ -220,17 +213,16 @@ gst_vorbisenc_class_init (VorbisEncClass * klass)
 }
 
 static GstPadLinkReturn
-gst_vorbisenc_sinkconnect (GstPad * pad, GstCaps * caps)
+gst_vorbisenc_sinkconnect (GstPad * pad, const GstCaps2 * caps)
 {
   VorbisEnc *vorbisenc;
+  GstStructure *structure;
 
   vorbisenc = GST_VORBISENC (gst_pad_get_parent (pad));
 
-  if (!GST_CAPS_IS_FIXED (caps))
-    return GST_PAD_LINK_DELAYED;
-
-  gst_caps_get_int (caps, "channels", &vorbisenc->channels);
-  gst_caps_get_int (caps, "rate",     &vorbisenc->frequency);
+  structure = gst_caps2_get_nth_cap (caps, 0);
+  gst_structure_get_int  (structure, "channels", &vorbisenc->channels);
+  gst_structure_get_int  (structure, "rate",     &vorbisenc->frequency);
 
   gst_vorbisenc_setup (vorbisenc);
 
