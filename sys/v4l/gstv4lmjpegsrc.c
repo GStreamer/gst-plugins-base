@@ -71,9 +71,9 @@ static gboolean              gst_v4lmjpegsrc_srcconvert   (GstPad         *pad,
                                                            GstFormat      *dest_format,
                                                            gint64         *dest_value);
 static GstPadLinkReturn      gst_v4lmjpegsrc_srcconnect   (GstPad         *pad,
-                                                           const GstCaps2        *caps);
+                                                           const GstCaps        *caps);
 static GstData*            gst_v4lmjpegsrc_get          (GstPad         *pad);
-static GstCaps2*              gst_v4lmjpegsrc_getcaps      (GstPad         *pad);
+static GstCaps*              gst_v4lmjpegsrc_getcaps      (GstPad         *pad);
 
 /* get/set params */
 static void                  gst_v4lmjpegsrc_set_property (GObject        *object,
@@ -353,7 +353,7 @@ calc_bufsize (int hor_dec,
 
 static GstPadLinkReturn
 gst_v4lmjpegsrc_srcconnect (GstPad  *pad,
-                            const GstCaps2 *caps)
+                            const GstCaps *caps)
 {
   GstV4lMjpegSrc *v4lmjpegsrc = GST_V4LMJPEGSRC(gst_pad_get_parent(pad));
   gint hor_dec, ver_dec;
@@ -381,7 +381,7 @@ gst_v4lmjpegsrc_srcconnect (GstPad  *pad,
    * our own mime type back and it'll work. Other properties are to be set
    * by the src, not by the opposite caps */
 
-  structure = gst_caps2_get_nth_cap (caps, 0);
+  structure = gst_caps_get_structure (caps, 0);
   gst_structure_get_int (structure, "width", &w);
   gst_structure_get_int (structure, "height", &h);
 
@@ -552,7 +552,7 @@ gst_v4lmjpegsrc_get (GstPad *pad)
 }
 
 
-static GstCaps2*
+static GstCaps*
 gst_v4lmjpegsrc_getcaps (GstPad  *pad)
 {
   GstV4lMjpegSrc *v4lmjpegsrc = GST_V4LMJPEGSRC(gst_pad_get_parent(pad));
@@ -562,7 +562,7 @@ gst_v4lmjpegsrc_getcaps (GstPad  *pad)
     return NULL;
   }
 
-  return gst_caps2_new_simple ("video/x-jpeg",
+  return gst_caps_new_simple ("video/x-jpeg",
       "width", GST_TYPE_INT_RANGE, vcap->maxwidth/4, vcap->maxwidth,
       "height", GST_TYPE_INT_RANGE, vcap->maxheight/4, vcap->maxheight,
       "framerate", GST_TYPE_DOUBLE_RANGE, 0.0, G_MAXDOUBLE,

@@ -509,14 +509,14 @@ gst_vorbis_tag_chain (GstPad *pad, GstData *data)
   if (tag->output == OUTPUT_UNKNOWN) {
     /* caps nego */
     do {
-      if (gst_pad_try_set_caps (tag->srcpad, gst_caps2_new_simple (
+      if (gst_pad_try_set_caps (tag->srcpad, gst_caps_new_simple (
 	      "audio/x-vorbis", NULL)) >= 0) {
 	tag->output = OUTPUT_DATA;
-      } else if (gst_pad_try_set_caps (tag->srcpad, gst_caps2_new_simple (
+      } else if (gst_pad_try_set_caps (tag->srcpad, gst_caps_new_simple (
 	      "application/x-gst-tags", NULL)) >= 0) {
 	tag->output = OUTPUT_TAGS;
       } else {
-	const GstCaps2 *caps = gst_static_caps2_get (
+	const GstCaps *caps = gst_static_caps_get (
 	    &gst_vorbis_tag_src_template.static_caps);
 	if (gst_pad_recover_caps_error (tag->srcpad, caps))
 	  continue;

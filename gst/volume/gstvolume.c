@@ -103,7 +103,7 @@ static void		volume_get_property     (GObject *object, guint prop_id, GValue *va
 static void		volume_update_volume    (const GValue *value, gpointer data);
 static void		volume_update_mute      (const GValue *value, gpointer data);
 
-static gboolean		volume_parse_caps          (GstVolume *filter, GstCaps2 *caps);
+static gboolean		volume_parse_caps          (GstVolume *filter, GstCaps *caps);
 
 static void		volume_chain_float         (GstPad *pad, GstData *_data);
 static void		volume_chain_int16         (GstPad *pad, GstData *_data);
@@ -112,7 +112,7 @@ static GstElementClass *parent_class = NULL;
 /*static guint gst_filter_signals[LAST_SIGNAL] = { 0 }; */
 
 static GstPadLinkReturn
-volume_connect (GstPad *pad, GstCaps2 *caps)
+volume_connect (GstPad *pad, GstCaps *caps)
 {
   GstVolume *filter;
   GstPad *otherpad;
@@ -139,7 +139,7 @@ volume_connect (GstPad *pad, GstCaps2 *caps)
 }
 
 static gboolean
-volume_parse_caps (GstVolume *filter, GstCaps2 *caps)
+volume_parse_caps (GstVolume *filter, GstCaps *caps)
 {
   const gchar *mimetype;
   

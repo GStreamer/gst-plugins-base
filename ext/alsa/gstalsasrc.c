@@ -239,7 +239,7 @@ gst_alsa_src_adjust_rate (gint rate, gboolean aggressive)
 static gboolean
 gst_alsa_src_set_caps (GstAlsaSrc *src, gboolean aggressive)
 {
-  GstCaps2 *all_caps, *caps;
+  GstCaps *all_caps, *caps;
   GstStructure *structure, *walk;
   gint channels, min_channels, max_channels;
   gint rate, min_rate, max_rate;
@@ -251,7 +251,7 @@ gst_alsa_src_set_caps (GstAlsaSrc *src, gboolean aggressive)
   if (all_caps == NULL) return FALSE;
   /* now intersect this with all caps of the peers... */
   for (i = 0; i < GST_ELEMENT (src)->numpads; i++) {
-    all_caps = gst_caps2_intersect (all_caps, gst_pad_get_caps (this->pad[i]));
+    all_caps = gst_caps_intersect (all_caps, gst_pad_get_caps (this->pad[i]));
     if (all_caps == NULL) {
       GST_DEBUG ("No compatible caps found in alsasrc (%s)", GST_ELEMENT_NAME (this));
       return FALSE;
@@ -259,14 +259,14 @@ gst_alsa_src_set_caps (GstAlsaSrc *src, gboolean aggressive)
   }
 
   /* construct caps */
-  caps = gst_caps2_new_simple ("audio/x-raw-int",
+  caps = gst_caps_new_simple ("audio/x-raw-int",
       NULL);
-  g_assert (gst_caps2_get_n_structures (caps) == 1);
-  structure = gst_caps2_get_nth_cap (caps, 0);
+  g_assert (gst_caps_get_size (caps) == 1);
+  structure = gst_caps_get_structure (caps, 0);
 
   /* now try to find the best match */
-  for (i = 0; i < gst_caps2_get_n_structures (all_caps); i++) {
-    walk = gst_caps2_get_nth_cap (all_caps, i);
+  for (i = 0; i < gst_caps_get_size (all_caps); i++) {
+    walk = gst_caps_get_structure (all_caps, i);
     if (!(gst_structure_get_int (walk, "signed", &sign) &&
 	  gst_structure_get_int (walk, "width", &width) &&
 	  gst_structure_get_int (walk, "depth", &depth))) {

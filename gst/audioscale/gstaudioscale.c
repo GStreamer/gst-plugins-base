@@ -157,12 +157,12 @@ gst_audioscale_class_init (AudioscaleClass *klass)
   parent_class = g_type_class_ref(GST_TYPE_ELEMENT);
 }
 
-static GstCaps2 *
+static GstCaps *
 gst_audioscale_getcaps (GstPad *pad)
 {
   Audioscale *audioscale;
-  GstCaps2 *peercaps;
-  GstCaps2 *caps;
+  GstCaps *peercaps;
+  GstCaps *caps;
   int i;
   int n;
 
@@ -174,16 +174,16 @@ gst_audioscale_getcaps (GstPad *pad)
     peercaps = gst_pad_get_allowed_caps (audioscale->srcpad);
   }
 
-  caps = gst_caps2_intersect (peercaps, gst_static_caps2_get (
+  caps = gst_caps_intersect (peercaps, gst_static_caps_get (
 	&gst_audioscale_sink_template.static_caps));
-  if (gst_caps2_is_empty(caps)) return caps;
+  if (gst_caps_is_empty(caps)) return caps;
 
   /* we do this hack, because the audioscale lib doesn't handle
    * rate conversions larger than a factor of 2 */
-  n = gst_caps2_get_n_structures (caps);
+  n = gst_caps_get_size (caps);
   for (i=0;i<n;i++){
     int rate_min, rate_max;
-    GstStructure *structure = gst_caps2_get_nth_cap (caps, i);
+    GstStructure *structure = gst_caps_get_structure (caps, i);
     const GValue *value;
 
     value = gst_structure_get_value (structure, "rate");
@@ -207,7 +207,7 @@ gst_audioscale_getcaps (GstPad *pad)
 }
 
 static GstPadLinkReturn
-gst_audioscale_link (GstPad * pad, const GstCaps2 * caps)
+gst_audioscale_link (GstPad * pad, const GstCaps * caps)
 {
   Audioscale *audioscale;
   resample_t *r;
@@ -229,7 +229,7 @@ gst_audioscale_link (GstPad * pad, const GstCaps2 * caps)
 
   audioscale->passthru = FALSE;
 
-  structure = gst_caps2_get_nth_cap (caps, 0);
+  structure = gst_caps_get_structure (caps, 0);
 
   ret = gst_structure_get_int (structure, "rate", &rate);
   ret &= gst_structure_get_int (structure, "channels", &channels);

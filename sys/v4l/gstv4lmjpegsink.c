@@ -56,7 +56,7 @@ static void                  gst_v4lmjpegsink_init         (GstV4lMjpegSink     
 
 /* the chain of buffers */
 static GstPadLinkReturn   gst_v4lmjpegsink_sinkconnect  (GstPad               *pad,
-                                                            const GstCaps2              *vscapslist);
+                                                            const GstCaps              *vscapslist);
 static void                  gst_v4lmjpegsink_chain        (GstPad               *pad,
                                                             GstData              *_data);
 
@@ -191,7 +191,7 @@ gst_v4lmjpegsink_init (GstV4lMjpegSink *v4lmjpegsink)
 
 static GstPadLinkReturn
 gst_v4lmjpegsink_sinkconnect (GstPad  *pad,
-                              const GstCaps2 *vscapslist)
+                              const GstCaps *vscapslist)
 {
   GstV4lMjpegSink *v4lmjpegsink;
   GstStructure *structure;
@@ -204,7 +204,7 @@ gst_v4lmjpegsink_sinkconnect (GstPad  *pad,
     if (!gst_v4lmjpegsink_playback_deinit(v4lmjpegsink))
       return GST_PAD_LINK_REFUSED;
 
-  structure = gst_caps2_get_nth_cap (vscapslist, 0);
+  structure = gst_caps_get_structure (vscapslist, 0);
 
   gst_structure_get_int  (structure, "width", &v4lmjpegsink->width);
   gst_structure_get_int  (structure, "height", &v4lmjpegsink->height);

@@ -87,7 +87,7 @@ GST_STATIC_PAD_TEMPLATE (
   "src",
   GST_PAD_SRC,
   GST_PAD_SOMETIMES,
-  GST_STATIC_CAPS2_ANY
+  GST_STATIC_CAPS_ANY
 );
 
 static GstStaticPadTemplate ogg_demux_sink_template_factory =
@@ -132,7 +132,7 @@ static void		gst_ogg_demux_push		(GstOggDemux *		ogg,
 static void		gst_ogg_pad_push		(GstOggDemux *		ogg,
 							 GstOggPad *		ogg_pad);
 
-static GstCaps2 *	gst_ogg_type_find		(ogg_packet *		packet);
+static GstCaps *	gst_ogg_type_find		(ogg_packet *		packet);
   
 	
 static GstElementClass *parent_class = NULL;
@@ -434,7 +434,7 @@ gst_ogg_pad_push (GstOggDemux *ogg, GstOggPad *pad)
 	break;
       case 1: {
 	if (!pad->pad) {
-	  GstCaps2 *caps = gst_ogg_type_find (&packet);
+	  GstCaps *caps = gst_ogg_type_find (&packet);
 	  gchar *name = g_strdup_printf ("serial %d", pad->serial);
 	  
 	  pad->pad = gst_pad_new_from_template (
@@ -514,7 +514,7 @@ gst_ogg_demux_change_state (GstElement *element)
 typedef struct {
   ogg_packet *	packet;
   guint		best_probability;
-  GstCaps2 *	caps;
+  GstCaps *	caps;
 } OggTypeFind;
 static guint8 *
 ogg_find_peek (gpointer data, gint64 offset, guint size)
@@ -528,16 +528,16 @@ ogg_find_peek (gpointer data, gint64 offset, guint size)
   }
 }
 static void
-ogg_find_suggest (gpointer data, guint probability, const GstCaps2 *caps)
+ogg_find_suggest (gpointer data, guint probability, const GstCaps *caps)
 {
   OggTypeFind *find = (OggTypeFind *) data;
   
   if (probability > find->best_probability) {
-    gst_caps2_replace (&find->caps, gst_caps2_copy (caps));
+    gst_caps_replace (&find->caps, gst_caps_copy (caps));
     find->best_probability = probability;
   }
 }
-static GstCaps2 *
+static GstCaps *
 gst_ogg_type_find (ogg_packet *packet)
 {
   GstTypeFind gst_find;

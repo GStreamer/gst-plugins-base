@@ -66,8 +66,8 @@ struct _VorbisFile {
   guint64 	 offset;
   gulong	 blocksize;
 
-  GstCaps2 	*metadata;
-  GstCaps2 	*streaminfo;
+  GstCaps 	*metadata;
+  GstCaps 	*streaminfo;
 };
 
 struct _VorbisFileClass {
@@ -175,16 +175,16 @@ vorbisfile_get_type (void)
   return vorbisfile_type;
 }
 
-static GstCaps2*
+static GstCaps*
 vorbis_caps_factory (void)
 {
-  return gst_caps2_new_simple ("application/ogg", NULL);
+  return gst_caps_new_simple ("application/ogg", NULL);
 }
 
-static GstCaps2*
+static GstCaps*
 raw_caps_factory (void)
 {
-  return gst_caps2_new_simple ("audio/x-raw-int",
+  return gst_caps_new_simple ("audio/x-raw-int",
       "endianness", 	G_TYPE_INT, G_BYTE_ORDER,
       "signed", 	G_TYPE_BOOLEAN, TRUE,
       "width", 		G_TYPE_INT, 16,
@@ -194,10 +194,10 @@ raw_caps_factory (void)
       NULL);
 }
 
-static GstCaps2*
+static GstCaps*
 raw_caps2_factory (void)
 {
-  return gst_caps2_new_simple ("audio/x-raw-float",
+  return gst_caps_new_simple ("audio/x-raw-float",
       "width",		G_TYPE_INT, 32,
       "endianness",	G_TYPE_INT, G_BYTE_ORDER,
       "rate",     	GST_TYPE_INT_RANGE, 11025, 48000,
@@ -210,7 +210,7 @@ static void
 gst_vorbisfile_base_init (gpointer g_class)
 {
   GstElementClass *element_class = GST_ELEMENT_CLASS (g_class);
-  GstCaps2 *raw_caps, *vorbis_caps, *raw_caps2;
+  GstCaps *raw_caps, *vorbis_caps, *raw_caps2;
 
   raw_caps = raw_caps_factory ();
   raw_caps2 = raw_caps2_factory ();
@@ -219,7 +219,7 @@ gst_vorbisfile_base_init (gpointer g_class)
   gst_vorbisdec_sink_template = gst_pad_template_new ("sink", GST_PAD_SINK, 
 		                                      GST_PAD_ALWAYS, 
 					              vorbis_caps);
-  gst_caps2_append (raw_caps2, raw_caps);
+  gst_caps_append (raw_caps2, raw_caps);
   gst_vorbisdec_src_template = gst_pad_template_new ("src", GST_PAD_SRC, 
 		                                     GST_PAD_ALWAYS, 
 					             raw_caps2);
@@ -415,7 +415,7 @@ ov_callbacks vorbisfile_ov_callbacks =
 };
 
 #if 0
-/* retrieve the comment field (or tags) and put in metadata GstCaps2
+/* retrieve the comment field (or tags) and put in metadata GstCaps
  * returns TRUE if caps could be set,
  * FALSE if they couldn't be read somehow */
 static gboolean
@@ -457,7 +457,7 @@ gst_vorbisfile_update_metadata (VorbisFile *vorbisfile, gint link)
   return TRUE;
 }
 
-/* retrieve logical stream properties and put them in streaminfo GstCaps2
+/* retrieve logical stream properties and put them in streaminfo GstCaps
  * returns TRUE if caps could be set,
  * FALSE if they couldn't be read somehow */
 static gboolean
@@ -510,13 +510,13 @@ static gboolean
 gst_vorbisfile_new_link (VorbisFile *vorbisfile, gint link)
 {
   vorbis_info *vi = ov_info (&vorbisfile->vf, link);
-  GstCaps2 *caps;
+  GstCaps *caps;
   gboolean res = TRUE;
 
   /* new logical bitstream */
   vorbisfile->current_link = link;
 
-  caps = gst_caps2_new_simple ("audio/x-raw-int",    
+  caps = gst_caps_new_simple ("audio/x-raw-int",    
       "endianness", G_TYPE_INT, G_BYTE_ORDER,
       "signed",     G_TYPE_BOOLEAN, TRUE,
       "width",      G_TYPE_INT, 16,
@@ -528,7 +528,7 @@ gst_vorbisfile_new_link (VorbisFile *vorbisfile, gint link)
   if (gst_pad_try_set_caps (vorbisfile->srcpad, caps) <= 0) {
     res = FALSE;
   }
-  gst_caps2_free (caps);
+  gst_caps_free (caps);
 
   return res;
 }

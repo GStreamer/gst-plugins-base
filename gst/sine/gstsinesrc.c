@@ -82,7 +82,7 @@ static void         gst_sinesrc_get_property        (GObject *object,
 					             GParamSpec *pspec);
 static GstPadLinkReturn
                     gst_sinesrc_link                (GstPad  *pad,
-						     const GstCaps2 *caps);
+						     const GstCaps *caps);
 static GstElementStateReturn
                     gst_sinesrc_change_state        (GstElement *element);
 
@@ -99,7 +99,7 @@ static gboolean     gst_sinesrc_src_query           (GstPad      *pad,
 						     gint64      *value);
 
 static GstData*   gst_sinesrc_get		    (GstPad *pad);
-static GstCaps2 * gst_sinesrc_src_fixate (GstPad *pad, const GstCaps2 *caps, gpointer user_data);
+static GstCaps * gst_sinesrc_src_fixate (GstPad *pad, const GstCaps *caps, gpointer user_data);
 
 static GstElementClass *parent_class = NULL;
 /*static guint gst_sinesrc_signals[LAST_SIGNAL] = { 0 }; */
@@ -217,26 +217,26 @@ gst_sinesrc_init (GstSineSrc *src)
 
 }
 
-static GstCaps2 *
-gst_sinesrc_src_fixate (GstPad *pad, const GstCaps2 *caps,
+static GstCaps *
+gst_sinesrc_src_fixate (GstPad *pad, const GstCaps *caps,
     gpointer user_data)
 {
   GstStructure *structure;
-  GstCaps2 *newcaps;
+  GstCaps *newcaps;
 
-  structure = gst_structure_copy (gst_caps2_get_nth_cap (caps, 0));
-  newcaps = gst_caps2_new_full (structure, NULL);
+  structure = gst_structure_copy (gst_caps_get_structure (caps, 0));
+  newcaps = gst_caps_new_full (structure, NULL);
 
-  if (gst_caps2_structure_fixate_field_nearest_int (structure, "rate", 44100)) {
+  if (gst_caps_structure_fixate_field_nearest_int (structure, "rate", 44100)) {
     return newcaps;
   }
 
-  gst_caps2_free (newcaps);
+  gst_caps_free (newcaps);
   return NULL;
 }
 
 static GstPadLinkReturn
-gst_sinesrc_link (GstPad *pad, const GstCaps2 *caps)
+gst_sinesrc_link (GstPad *pad, const GstCaps *caps)
 {
   GstSineSrc *sinesrc;
   const GstStructure *structure;
@@ -245,7 +245,7 @@ gst_sinesrc_link (GstPad *pad, const GstCaps2 *caps)
   GST_DEBUG ("gst_sinesrc_src_link");
   sinesrc = GST_SINESRC (gst_pad_get_parent (pad));
 
-  structure = gst_caps2_get_nth_cap (caps, 0);
+  structure = gst_caps_get_structure (caps, 0);
 
   ret = gst_structure_get_int (structure, "rate", &sinesrc->samplerate);
 
@@ -497,7 +497,7 @@ gst_sinesrc_update_table_inc (GstSineSrc *src)
 static gboolean 
 gst_sinesrc_force_caps (GstSineSrc *src)
 {
-  static GstStaticCaps2 static_caps = GST_STATIC_CAPS ("audio/x-raw-int, "
+  static GstStaticCaps static_caps = GST_STATIC_CAPS ("audio/x-raw-int, "
       "endianness = (int) BYTE_ORDER, "
       "signed = (boolean) true, "
       "width = (int) 16, "
@@ -505,15 +505,15 @@ gst_sinesrc_force_caps (GstSineSrc *src)
       "rate = (int) [ 8000, 48000 ], "
       "channels = (int) 1"
   );
-  GstCaps2 *caps;
+  GstCaps *caps;
   GstStructure *structure;
 
   if (!src->newcaps)
     return TRUE;
   
-  caps = gst_caps2_copy (gst_static_caps2_get (&static_caps));
+  caps = gst_caps_copy (gst_static_caps_get (&static_caps));
 
-  structure = gst_caps2_get_nth_cap (caps, 0);
+  structure = gst_caps_get_structure (caps, 0);
 
   gst_structure_set (structure, "rate", G_TYPE_INT, src->samplerate, NULL);
   

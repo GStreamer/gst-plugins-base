@@ -146,7 +146,7 @@ gst_tcpsink_class_init (GstTCPSink *klass)
 
 
 static GstPadLinkReturn
-gst_tcpsink_sink_link (GstPad *pad, const GstCaps2 *caps)
+gst_tcpsink_sink_link (GstPad *pad, const GstCaps *caps)
 {
   GstTCPSink *tcpsink;
   struct sockaddr_in serv_addr;
@@ -191,7 +191,7 @@ gst_tcpsink_sink_link (GstPad *pad, const GstCaps2 *caps)
   	doc = xmlNewDoc ("1.0");
   	doc->xmlRootNode = xmlNewDocNode (doc, NULL, "NewCaps", NULL);
 
-  	gst_caps2_save_thyself (caps, doc->xmlRootNode);
+  	gst_caps_save_thyself (caps, doc->xmlRootNode);
 
   	if ((fd = socket (AF_INET, SOCK_STREAM, IPPROTO_TCP)) == -1) {
     	  perror("socket");

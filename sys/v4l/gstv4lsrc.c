@@ -64,8 +64,8 @@ static gboolean              gst_v4lsrc_srcconvert   (GstPad         *pad,
                                                       GstFormat      *dest_format,
                                                       gint64         *dest_value);
 static GstPadLinkReturn      gst_v4lsrc_srcconnect   (GstPad         *pad,
-                                                      const GstCaps2        *caps);
-static GstCaps2*	             gst_v4lsrc_getcaps      (GstPad         *pad);
+                                                      const GstCaps        *caps);
+static GstCaps*	             gst_v4lsrc_getcaps      (GstPad         *pad);
 static GstData*            gst_v4lsrc_get          (GstPad         *pad);
 
 /* get/set params */
@@ -275,11 +275,11 @@ gst_v4lsrc_srcconvert (GstPad    *pad,
   return TRUE;
 }
 
-static GstCaps2 *
+static GstCaps *
 gst_v4lsrc_palette_to_caps (int            palette)
 {
   guint32 fourcc;
-  GstCaps2 *caps;
+  GstCaps *caps;
 
   switch (palette) {
     case VIDEO_PALETTE_YUV422:
@@ -308,7 +308,7 @@ gst_v4lsrc_palette_to_caps (int            palette)
   if (fourcc == GST_MAKE_FOURCC('R','G','B',' ')) {
     switch (palette) {
       case VIDEO_PALETTE_RGB555:
-	caps = gst_caps2_from_string ("video/x-raw-rgb, "
+	caps = gst_caps_from_string ("video/x-raw-rgb, "
 	    "bpp = (int) 16, "
 	    "depth = (int) 15, "
 	    "endianness = (int) BYTE_ORDER, "
@@ -317,7 +317,7 @@ gst_v4lsrc_palette_to_caps (int            palette)
 	    "blue_mask = 0x001f");
         break;
       case VIDEO_PALETTE_RGB565:
-	caps = gst_caps2_from_string ("video/x-raw-rgb, "
+	caps = gst_caps_from_string ("video/x-raw-rgb, "
 	    "bpp = (int) 16, "
 	    "depth = (int) 16, "
 	    "endianness = (int) BYTE_ORDER, "
@@ -326,7 +326,7 @@ gst_v4lsrc_palette_to_caps (int            palette)
 	    "blue_mask = 0x001f");
         break;
       case VIDEO_PALETTE_RGB24:
-	caps = gst_caps2_from_string ("video/x-raw-rgb, "
+	caps = gst_caps_from_string ("video/x-raw-rgb, "
 	    "bpp = (int) 24, "
 	    "depth = (int) 24, "
 	    "endianness = (int) BIG_ENDIAN, "
@@ -335,7 +335,7 @@ gst_v4lsrc_palette_to_caps (int            palette)
 	    "blue_mask = " B_MASK_24);
         break;
       case VIDEO_PALETTE_RGB32:
-	caps = gst_caps2_from_string ("video/x-raw-rgb, "
+	caps = gst_caps_from_string ("video/x-raw-rgb, "
 	    "bpp = (int) 24, "
 	    "depth = (int) 32, "
 	    "endianness = (int) BIG_ENDIAN, "
@@ -348,7 +348,7 @@ gst_v4lsrc_palette_to_caps (int            palette)
 	return NULL;
     }
   } else {
-    caps = gst_caps2_new_simple ("video/x-raw-yuv",
+    caps = gst_caps_new_simple ("video/x-raw-yuv",
 	"format", GST_TYPE_FOURCC, fourcc, NULL);
   }
 
@@ -357,11 +357,11 @@ gst_v4lsrc_palette_to_caps (int            palette)
 
 
 static GstPadLinkReturn
-gst_v4lsrc_srcconnect (GstPad  *pad, const GstCaps2 *vscapslist)
+gst_v4lsrc_srcconnect (GstPad  *pad, const GstCaps *vscapslist)
 {
   GstPadLinkReturn ret_val;
   GstV4lSrc *v4lsrc;
-  GstCaps2 *newcaps;
+  GstCaps *newcaps;
   gint palette;
   guint32 fourcc;
   gint depth, w, h;
@@ -381,7 +381,7 @@ gst_v4lsrc_srcconnect (GstPad  *pad, const GstCaps2 *vscapslist)
     return GST_PAD_LINK_DELAYED;
   }
 
-  structure = gst_caps2_get_nth_cap (vscapslist, 0);
+  structure = gst_caps_get_structure (vscapslist, 0);
 
   if (!strcmp(gst_structure_get_name (structure), "video/x-raw-yuv"))
     gst_structure_get_fourcc (structure, "format", &fourcc);
@@ -444,7 +444,7 @@ gst_v4lsrc_srcconnect (GstPad  *pad, const GstCaps2 *vscapslist)
   /* try to connect the pad/caps with the actual width/height */
   //newcaps = gst_v4lsrc_palette_to_caps_fixed(palette);
   newcaps = gst_v4lsrc_palette_to_caps (palette);
-  gst_caps2_set_simple (newcaps,
+  gst_caps_set_simple (newcaps,
       "width", G_TYPE_INT, w,
       "height", G_TYPE_INT, h,
       "framerate", G_TYPE_DOUBLE, gst_v4lsrc_get_fps(v4lsrc),
@@ -467,10 +467,10 @@ gst_v4lsrc_srcconnect (GstPad  *pad, const GstCaps2 *vscapslist)
 }
 
 
-static GstCaps2 *
+static GstCaps *
 gst_v4lsrc_getcaps (GstPad  *pad)
 {
-  GstCaps2 *list;
+  GstCaps *list;
   GstV4lSrc *v4lsrc = GST_V4LSRC(gst_pad_get_parent(pad));
   int palette[] = {
     VIDEO_PALETTE_YUV422,
@@ -488,9 +488,9 @@ gst_v4lsrc_getcaps (GstPad  *pad)
     return NULL;
   }
 
-  list = gst_caps2_new_empty();
+  list = gst_caps_new_empty();
   for (i = 0; i < 8; i++) {
-    GstCaps2 *one;
+    GstCaps *one;
 #define gst_v4lsrc_palette_to_caps_range(palette, min_w, max_w, min_h, max_h) \
   gst_v4lsrc_palette_to_caps(palette, \
                              gst_props_entry_new("width", \
@@ -505,11 +505,11 @@ gst_v4lsrc_getcaps (GstPad  *pad)
                             )
 
     one = gst_v4lsrc_palette_to_caps(palette[i]);
-    gst_caps2_set_simple (one,
+    gst_caps_set_simple (one,
 	"width", GST_TYPE_INT_RANGE, vcap->minwidth,  vcap->maxwidth,
 	"height", GST_TYPE_INT_RANGE, vcap->minheight, vcap->maxheight,
 	NULL);
-    gst_caps2_append(list, one);
+    gst_caps_append(list, one);
   }
 
   return list;

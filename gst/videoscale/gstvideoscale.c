@@ -65,15 +65,15 @@ gst_videoscale_method_get_type (void)
   return videoscale_method_type;
 }
 
-static GstCaps2 *
+static GstCaps *
 gst_videoscale_get_capslist(void)
 {
-  GstCaps2 *caps;
+  GstCaps *caps;
   int i;
 
-  caps = gst_caps2_new_empty();
+  caps = gst_caps_new_empty();
   for(i=0;i<videoscale_n_formats;i++){
-    gst_caps2_append_cap (caps,
+    gst_caps_append_structure (caps,
 	videoscale_get_structure (videoscale_formats + i));
   }
 
@@ -102,7 +102,7 @@ static void	gst_videoscale_set_property		(GObject *object, guint prop_id, const 
 static void	gst_videoscale_get_property		(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
 
 static void	gst_videoscale_chain		(GstPad *pad, GstData *_data);
-static GstCaps2 * gst_videoscale_get_capslist(void);
+static GstCaps * gst_videoscale_get_capslist(void);
 
 static GstElementClass *parent_class = NULL;
 /*static guint gst_videoscale_signals[LAST_SIGNAL] = { 0 }; */
@@ -159,12 +159,12 @@ gst_videoscale_class_init (GstVideoscaleClass *klass)
 
 }
 
-static GstCaps2 *
+static GstCaps *
 gst_videoscale_getcaps (GstPad *pad)
 {
   GstVideoscale *videoscale;
-  GstCaps2 *peercaps;
-  GstCaps2 *caps;
+  GstCaps *peercaps;
+  GstCaps *caps;
   GstPad *otherpad;
   int i;
 
@@ -187,9 +187,9 @@ gst_videoscale_getcaps (GstPad *pad)
 
   GST_DEBUG_CAPS("othercaps are", peercaps);
 
-  caps = gst_caps2_copy (peercaps);
-  for(i=0;i<gst_caps2_get_n_structures(caps);i++) {
-    GstStructure *structure = gst_caps2_get_nth_cap (caps, i);
+  caps = gst_caps_copy (peercaps);
+  for(i=0;i<gst_caps_get_size(caps);i++) {
+    GstStructure *structure = gst_caps_get_structure (caps, i);
 
     gst_structure_set (structure,
 	"width", GST_TYPE_INT_RANGE, 1, G_MAXINT,
@@ -204,11 +204,11 @@ gst_videoscale_getcaps (GstPad *pad)
 
 
 static GstPadLinkReturn
-gst_videoscale_link (GstPad *pad, const GstCaps2 *caps)
+gst_videoscale_link (GstPad *pad, const GstCaps *caps)
 {
   GstVideoscale *videoscale;
   GstPadLinkReturn ret;
-  GstCaps2 *othercaps;
+  GstCaps *othercaps;
   GstPad *otherpad;
   GstStructure *structure;
 
@@ -231,7 +231,7 @@ gst_videoscale_link (GstPad *pad, const GstCaps2 *caps)
 
   othercaps = GST_PAD_CAPS (otherpad);
 
-  structure = gst_caps2_get_nth_cap (caps, 0);
+  structure = gst_caps_get_structure (caps, 0);
   if (pad == videoscale->srcpad) {
     ret = gst_structure_get_int (structure, "width", &videoscale->to_width);
     ret &= gst_structure_get_int (structure, "height", &videoscale->to_height);

@@ -206,7 +206,7 @@ gst_adder_parse_caps (GstAdder *adder, GstStructure *structure)
 }
 
 static GstPadLinkReturn
-gst_adder_link (GstPad *pad, const GstCaps2 *caps)
+gst_adder_link (GstPad *pad, const GstCaps *caps)
 {
   GstAdder *adder;
   const GList *sinkpads;
@@ -219,7 +219,7 @@ gst_adder_link (GstPad *pad, const GstCaps2 *caps)
 
   adder = GST_ADDER (GST_PAD_PARENT (pad));
 
-  if (!gst_adder_parse_caps (adder, gst_caps2_get_nth_cap (caps, 0)))
+  if (!gst_adder_parse_caps (adder, gst_caps_get_structure (caps, 0)))
     return GST_PAD_LINK_REFUSED;
 
   if (pad == adder->srcpad || gst_pad_try_set_caps (adder->srcpad, caps) > 0) {
@@ -524,7 +524,7 @@ gst_adder_loop (GstElement *element)
   }
 
   if (adder->format == GST_ADDER_FORMAT_UNSET) {
-    GstCaps2 *caps = gst_caps2_from_string (GST_AUDIO_INT_PAD_TEMPLATE_CAPS);
+    GstCaps *caps = gst_caps_from_string (GST_AUDIO_INT_PAD_TEMPLATE_CAPS);
 
     if (gst_pad_try_set_caps (adder->srcpad, caps) < 0) {
       gst_element_error (GST_ELEMENT (adder),
@@ -533,7 +533,7 @@ gst_adder_loop (GstElement *element)
       return;
     }
 
-    gst_adder_parse_caps (adder, gst_caps2_get_nth_cap(caps, 0));
+    gst_adder_parse_caps (adder, gst_caps_get_structure(caps, 0));
   }
 
   GST_BUFFER_TIMESTAMP (buf_out) = adder->timestamp;

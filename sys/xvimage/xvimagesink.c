@@ -344,7 +344,7 @@ gst_xvimagesink_handle_xevents (GstXvImageSink *xvimagesink, GstPad *pad)
   g_mutex_unlock (xvimagesink->x_lock);
 }
 
-static GstCaps2 *
+static GstCaps *
 gst_xvimagesink_get_xv_support (GstXContext *xcontext)
 {
   gint i, nb_adaptors;
@@ -400,21 +400,21 @@ gst_xvimagesink_get_xv_support (GstXContext *xcontext)
     {
       gint nb_formats;
       XvImageFormatValues *formats = NULL;
-      GstCaps2 *caps = NULL;
+      GstCaps *caps = NULL;
       
       /* We get all image formats supported by our port */
       formats = XvListImageFormats (xcontext->disp,
                                     xcontext->xv_port_id, &nb_formats);
-      caps = gst_caps2_new_empty ();
+      caps = gst_caps_new_empty ();
       for (i = 0; i < nb_formats; i++)
         {
-          GstCaps2 *format_caps = NULL;
+          GstCaps *format_caps = NULL;
           
           switch (formats[i].type)
             {
               case XvRGB:
                 {
-                  format_caps = gst_caps2_new_simple ("video/x-raw-rgb",
+                  format_caps = gst_caps_new_simple ("video/x-raw-rgb",
 		      "endianness", G_TYPE_INT, xcontext->endianness,
 		      "depth", G_TYPE_INT, xcontext->depth,
 		      "bpp", G_TYPE_INT, xcontext->bpp,
@@ -437,7 +437,7 @@ gst_xvimagesink_get_xv_support (GstXContext *xcontext)
                       if (format)
                         {
                           format->format = formats[i].id;
-                          format->caps = gst_caps2_copy (format_caps);
+                          format->caps = gst_caps_copy (format_caps);
                           xcontext->formats_list = g_list_append (
                                                 xcontext->formats_list, format);
                         }
@@ -445,7 +445,7 @@ gst_xvimagesink_get_xv_support (GstXContext *xcontext)
                   break;
                 }
               case XvYUV:
-		format_caps = gst_caps2_new_simple ("video/x-raw-yuv",
+		format_caps = gst_caps_new_simple ("video/x-raw-yuv",
 		    "format", GST_TYPE_FOURCC,formats[i].id,
 		    "width", GST_TYPE_INT_RANGE, 0, G_MAXINT,
 		    "height", GST_TYPE_INT_RANGE, 0, G_MAXINT,
@@ -457,7 +457,7 @@ gst_xvimagesink_get_xv_support (GstXContext *xcontext)
 		break;
             }
           
-          gst_caps2_append (caps, format_caps);
+          gst_caps_append (caps, format_caps);
         }
         
       if (formats)
@@ -580,7 +580,7 @@ gst_xvimagesink_xcontext_clear (GstXvImageSink *xvimagesink)
   while (list)
     {
       GstXvImageFormat *format = list->data;
-      gst_caps2_free (format->caps);
+      gst_caps_free (format->caps);
       g_free (format);
       list = g_list_next (list);
     }
@@ -588,7 +588,7 @@ gst_xvimagesink_xcontext_clear (GstXvImageSink *xvimagesink)
   if (xvimagesink->xcontext->formats_list)
     g_list_free (xvimagesink->xcontext->formats_list);
     
-  gst_caps2_free (xvimagesink->xcontext->caps);
+  gst_caps_free (xvimagesink->xcontext->caps);
   
   g_mutex_lock (xvimagesink->x_lock);
   
@@ -606,7 +606,7 @@ gst_xvimagesink_xcontext_clear (GstXvImageSink *xvimagesink)
 
 static gint
 gst_xvimagesink_get_fourcc_from_caps (GstXvImageSink *xvimagesink,
-                                      GstCaps2 *caps)
+                                      GstCaps *caps)
 {
   GList *list = NULL;
   
@@ -621,9 +621,9 @@ gst_xvimagesink_get_fourcc_from_caps (GstXvImageSink *xvimagesink,
       
       if (format)
         {
-          GstCaps2 *icaps = NULL;
-          icaps = gst_caps2_intersect (caps, format->caps);
-          if (!gst_caps2_is_empty(icaps))
+          GstCaps *icaps = NULL;
+          icaps = gst_caps_intersect (caps, format->caps);
+          if (!gst_caps_is_empty(icaps))
             return format->format;
         }
       list = g_list_next (list);
@@ -632,7 +632,7 @@ gst_xvimagesink_get_fourcc_from_caps (GstXvImageSink *xvimagesink,
   return 0;
 }
 
-static GstCaps2 *
+static GstCaps *
 gst_xvimagesink_getcaps (GstPad *pad)
 {
   GstXvImageSink *xvimagesink;
@@ -640,9 +640,9 @@ gst_xvimagesink_getcaps (GstPad *pad)
   xvimagesink = GST_XVIMAGESINK (gst_pad_get_parent (pad));
   
   if (xvimagesink->xcontext)
-    return gst_caps2_copy (xvimagesink->xcontext->caps);
+    return gst_caps_copy (xvimagesink->xcontext->caps);
 
-  return gst_caps2_from_string(
+  return gst_caps_from_string(
     "video/x-raw-rgb, "
       "framerate = (double) [ 0, MAX ], "
       "width = (int) [ 0, MAX ], "
@@ -654,7 +654,7 @@ gst_xvimagesink_getcaps (GstPad *pad)
 }
 
 static GstPadLinkReturn
-gst_xvimagesink_sinkconnect (GstPad *pad, const GstCaps2 *caps)
+gst_xvimagesink_sinkconnect (GstPad *pad, const GstCaps *caps)
 {
   GstXvImageSink *xvimagesink;
   char *caps_str1, *caps_str2;
@@ -663,15 +663,15 @@ gst_xvimagesink_sinkconnect (GstPad *pad, const GstCaps2 *caps)
 
   xvimagesink = GST_XVIMAGESINK (gst_pad_get_parent (pad));
 
-  caps_str1 = gst_caps2_to_string (xvimagesink->xcontext->caps);
-  caps_str2 = gst_caps2_to_string (caps);
+  caps_str1 = gst_caps_to_string (xvimagesink->xcontext->caps);
+  caps_str2 = gst_caps_to_string (caps);
                                                                                 
   GST_DEBUG ("sinkconnect %s with %s", caps_str1, caps_str2);
                                                                                 
   g_free (caps_str1);
   g_free (caps_str2);
   
-  structure = gst_caps2_get_nth_cap (caps, 0);
+  structure = gst_caps_get_structure (caps, 0);
   ret = gst_structure_get_int (structure, "width", &(GST_VIDEOSINK_WIDTH (xvimagesink)));
   ret &= gst_structure_get_int (structure, "height", &(GST_VIDEOSINK_HEIGHT (xvimagesink)));
   ret &= gst_structure_get_double (structure, "framerate", &xvimagesink->framerate);
@@ -680,7 +680,7 @@ gst_xvimagesink_sinkconnect (GstPad *pad, const GstCaps2 *caps)
   if (!gst_structure_get_fourcc (structure, "format",
 	&xvimagesink->xcontext->im_format)) {
     xvimagesink->xcontext->im_format = gst_xvimagesink_get_fourcc_from_caps (
-	xvimagesink, gst_caps2_copy(caps));
+	xvimagesink, gst_caps_copy(caps));
   }
   
   xvimagesink->pixel_width = 1;

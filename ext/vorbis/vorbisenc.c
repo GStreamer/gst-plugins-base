@@ -129,17 +129,17 @@ vorbisenc_get_type (void)
   return vorbisenc_type;
 }
 
-static GstCaps2*
+static GstCaps*
 vorbis_caps_factory (void)
 {
-  return gst_caps2_new_simple ("application/ogg", NULL);
+  return gst_caps_new_simple ("application/ogg", NULL);
 }
 
-static GstCaps2*
+static GstCaps*
 raw_caps_factory (void)
 {
   return
-   gst_caps2_new_simple ("audio/x-raw-int",
+   gst_caps_new_simple ("audio/x-raw-int",
        "endianness", 	G_TYPE_INT, G_BYTE_ORDER,
        "signed", 	G_TYPE_BOOLEAN, TRUE,
        "width", 	G_TYPE_INT, 16,
@@ -153,7 +153,7 @@ static void
 gst_vorbisenc_base_init (gpointer g_class)
 {
   GstElementClass *element_class = GST_ELEMENT_CLASS (g_class);
-  GstCaps2 *raw_caps, *vorbis_caps;
+  GstCaps *raw_caps, *vorbis_caps;
 
   raw_caps = raw_caps_factory ();
   vorbis_caps = vorbis_caps_factory ();
@@ -213,14 +213,14 @@ gst_vorbisenc_class_init (VorbisEncClass * klass)
 }
 
 static GstPadLinkReturn
-gst_vorbisenc_sinkconnect (GstPad * pad, const GstCaps2 * caps)
+gst_vorbisenc_sinkconnect (GstPad * pad, const GstCaps * caps)
 {
   VorbisEnc *vorbisenc;
   GstStructure *structure;
 
   vorbisenc = GST_VORBISENC (gst_pad_get_parent (pad));
 
-  structure = gst_caps2_get_nth_cap (caps, 0);
+  structure = gst_caps_get_structure (caps, 0);
   gst_structure_get_int  (structure, "channels", &vorbisenc->channels);
   gst_structure_get_int  (structure, "rate",     &vorbisenc->frequency);
 

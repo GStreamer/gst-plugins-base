@@ -29,7 +29,7 @@
 
 #if 0
 static void
-print_caps (GstCaps2 *caps)
+print_caps (GstCaps *caps)
 {
   GValue v = { 0, };
   GValue s = { 0, };
@@ -121,7 +121,7 @@ static void  gst_audio_convert_get_property (GObject *object, guint prop_id, GVa
 
 /* gstreamer functions */
 static void                  gst_audio_convert_chain        (GstPad *pad, GstData *_data);
-static GstPadLinkReturn      gst_audio_convert_link         (GstPad *pad, const GstCaps2 *caps);
+static GstPadLinkReturn      gst_audio_convert_link         (GstPad *pad, const GstCaps *caps);
 static GstElementStateReturn gst_audio_convert_change_state (GstElement *element);
 
 /* actual work */
@@ -373,7 +373,7 @@ gst_audio_convert_chain (GstPad *pad, GstData *_data)
 }
 
 static GstPadLinkReturn
-gst_audio_convert_link (GstPad *pad, const GstCaps2 *caps)
+gst_audio_convert_link (GstPad *pad, const GstCaps *caps)
 {
   GstAudioConvert *this;
   gint nr = 0;
@@ -389,7 +389,7 @@ gst_audio_convert_link (GstPad *pad, const GstCaps2 *caps)
   nr = (pad == this->sink) ? 0 : (pad == this->src) ? 1 : -1;
   g_assert (nr > -1);
 
-  structure = gst_caps2_get_nth_cap (caps, 0);
+  structure = gst_caps_get_structure (caps, 0);
 
   ret = gst_structure_get_int (structure, "channels", &channels);
   ret &= gst_structure_get_boolean (structure, "signed", &sign);
@@ -442,12 +442,12 @@ gst_audio_convert_change_state (GstElement *element)
 
 /*** ACTUAL WORK **************************************************************/
 
-static GstCaps2 *
+static GstCaps *
 make_caps (gint endianness, gboolean sign, gint depth, gint width, gint rate, gint channels)
 {
-  GstCaps2 *caps;
+  GstCaps *caps;
 
-  caps = gst_caps2_new_simple ("audio/x-raw-int",
+  caps = gst_caps_new_simple ("audio/x-raw-int",
       "signed", G_TYPE_BOOLEAN, sign,
       "depth", G_TYPE_INT, depth,
       "width", G_TYPE_INT, width * 8,
@@ -455,7 +455,7 @@ make_caps (gint endianness, gboolean sign, gint depth, gint width, gint rate, gi
       "channels", G_TYPE_INT, channels, NULL);
 
   if (width != 1) {
-    gst_caps2_set_simple (caps, 
+    gst_caps_set_simple (caps, 
         "endianness", G_TYPE_INT, endianness, NULL);
   }
 
@@ -465,7 +465,7 @@ make_caps (gint endianness, gboolean sign, gint depth, gint width, gint rate, gi
 static gboolean
 gst_audio_convert_set_caps (GstPad *pad)
 {
-  GstCaps2 *caps;
+  GstCaps *caps;
   gint nr;
   GstPadLinkReturn ret;
   GstAudioConvert *this;

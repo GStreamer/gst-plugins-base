@@ -76,7 +76,7 @@ struct _GstXContext {
   
   gboolean use_xshm;
   
-  GstCaps2 *caps;
+  GstCaps *caps;
 };
 
 /* XWindow stuff */

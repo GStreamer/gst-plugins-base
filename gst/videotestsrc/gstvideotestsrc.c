@@ -80,9 +80,9 @@ static gboolean gst_videotestsrc_src_query (GstPad      *pad,
 
 static GstElementClass *parent_class = NULL;
 
-static GstCaps2 * gst_videotestsrc_get_capslist (void);
+static GstCaps * gst_videotestsrc_get_capslist (void);
 #if 0
-static GstCaps2 * gst_videotestsrc_get_capslist_size (int width, int height, double rate);
+static GstCaps * gst_videotestsrc_get_capslist_size (int width, int height, double rate);
 #endif
 
 
@@ -193,40 +193,40 @@ gst_videotestsrc_set_clock (GstElement *element, GstClock *clock)
   gst_object_replace ((GstObject **)&v->clock, (GstObject *)clock);
 }
 
-static GstCaps2 *
-gst_videotestsrc_src_fixate (GstPad * pad, const GstCaps2 * caps,
+static GstCaps *
+gst_videotestsrc_src_fixate (GstPad * pad, const GstCaps * caps,
     gpointer user_data)
 {
   GstStructure *structure;
-  GstCaps2 *newcaps;
+  GstCaps *newcaps;
 
   /* FIXME this function isn't very intelligent in choosing "good" caps */
 
-  structure = gst_structure_copy(gst_caps2_get_nth_cap (caps, 0));
-  newcaps = gst_caps2_new_full (structure, NULL);
+  structure = gst_structure_copy(gst_caps_get_structure (caps, 0));
+  newcaps = gst_caps_new_full (structure, NULL);
 
-  if (gst_caps2_get_n_structures (caps) > 1) {
+  if (gst_caps_get_size (caps) > 1) {
     return newcaps;
   }
 
-  if (gst_caps2_structure_fixate_field_nearest_int (structure, "width", 320)) {
+  if (gst_caps_structure_fixate_field_nearest_int (structure, "width", 320)) {
     return newcaps;
   }
-  if (gst_caps2_structure_fixate_field_nearest_int (structure, "height", 240)) {
+  if (gst_caps_structure_fixate_field_nearest_int (structure, "height", 240)) {
     return newcaps;
   }
-  if (gst_caps2_structure_fixate_field_nearest_double (structure, "framerate",
+  if (gst_caps_structure_fixate_field_nearest_double (structure, "framerate",
 	30.0)) {
     return newcaps;
   }
 
   /* failed to fixate */
-  gst_caps2_free (newcaps);
+  gst_caps_free (newcaps);
   return NULL;
 }
 
 static GstPadLinkReturn
-gst_videotestsrc_src_link (GstPad * pad, const GstCaps2 * caps)
+gst_videotestsrc_src_link (GstPad * pad, const GstCaps * caps)
 {
   GstVideotestsrc *videotestsrc;
   const GstStructure *structure;
@@ -235,7 +235,7 @@ gst_videotestsrc_src_link (GstPad * pad, const GstCaps2 * caps)
   GST_DEBUG ("gst_videotestsrc_src_link");
   videotestsrc = GST_VIDEOTESTSRC (gst_pad_get_parent (pad));
 
-  structure = gst_caps2_get_nth_cap (caps, 0);
+  structure = gst_caps_get_structure (caps, 0);
 
   videotestsrc->fourcc = paintinfo_find_by_structure(structure);
   if (!videotestsrc->fourcc) {
@@ -292,49 +292,49 @@ gst_videotestsrc_change_state (GstElement * element)
   return parent_class->change_state (element);
 }
 
-static GstCaps2 *
+static GstCaps *
 gst_videotestsrc_get_capslist (void)
 {
-  GstCaps2 *caps;
+  GstCaps *caps;
   GstStructure *structure;
   int i;
 
-  caps = gst_caps2_new_empty();
+  caps = gst_caps_new_empty();
   for(i=0;i<n_fourccs;i++){
     structure = paint_get_structure (fourcc_list + i);
     gst_structure_set(structure,
 	"width", GST_TYPE_INT_RANGE, 1, G_MAXINT,
 	"height", GST_TYPE_INT_RANGE, 1, G_MAXINT,
 	"framerate", GST_TYPE_DOUBLE_RANGE, 0.0, G_MAXDOUBLE, NULL);
-    gst_caps2_append_cap (caps, structure);
+    gst_caps_append_structure (caps, structure);
   }
 
   return caps;
 }
 
 #if 0
-static GstCaps2 *
+static GstCaps *
 gst_videotestsrc_get_capslist_size (int width, int height, double rate)
 {
-  GstCaps2 *caps;
+  GstCaps *caps;
   GstStructure *structure;
   int i;
 
-  caps = gst_caps2_new_empty();
+  caps = gst_caps_new_empty();
   for(i=0;i<n_fourccs;i++){
     structure = paint_get_structure (fourcc_list + i);
     gst_structure_set(structure,
 	"width", G_TYPE_INT, width,
 	"height", G_TYPE_INT, height,
 	"framerate", G_TYPE_INT, rate, NULL);
-    gst_caps2_append_cap (caps, structure);
+    gst_caps_append_structure (caps, structure);
   }
 
   return caps;
 }
 #endif
 
-static GstCaps2 *
+static GstCaps *
 gst_videotestsrc_getcaps (GstPad * pad)
 {
   GstVideotestsrc *vts;

@@ -85,7 +85,7 @@ struct _GstXContext {
   
   GList *formats_list;
   
-  GstCaps2 *caps;
+  GstCaps *caps;
 };
 
 /* XWindow stuff */
@@ -99,7 +99,7 @@ struct _GstXWindow {
 /* XvImage format stuff */
 struct _GstXvImageFormat {
   gint format;
-  GstCaps2 *caps;
+  GstCaps *caps;
 };
 
 /* XvImage stuff */

@@ -303,7 +303,7 @@ gst_ximagesink_handle_xevents (GstXImageSink *ximagesink, GstPad *pad)
                 ximagesink->xwindow->height = e.xconfigure.height;
                 
                 r = gst_pad_try_set_caps (GST_VIDEOSINK_PAD (ximagesink),
-		    gst_caps2_new_simple ("video/x-raw-rgb",
+		    gst_caps_new_simple ("video/x-raw-rgb",
 		      "bpp",        G_TYPE_INT, ximagesink->xcontext->bpp,
 		      "depth",      G_TYPE_INT, ximagesink->xcontext->depth,
 		      "endianness", G_TYPE_INT, ximagesink->xcontext->endianness,
@@ -460,7 +460,7 @@ gst_ximagesink_xcontext_get (GstXImageSink *ximagesink)
     xcontext->visual->blue_mask = GULONG_TO_BE (xcontext->visual->blue_mask);
   }
   
-  xcontext->caps = gst_caps2_new_simple ("video/x-raw-rgb",
+  xcontext->caps = gst_caps_new_simple ("video/x-raw-rgb",
       "bpp",        G_TYPE_INT, xcontext->bpp,
       "depth",      G_TYPE_INT, xcontext->depth,
       "endianness", G_TYPE_INT, xcontext->endianness,
@@ -485,7 +485,7 @@ gst_ximagesink_xcontext_clear (GstXImageSink *ximagesink)
   g_return_if_fail (ximagesink != NULL);
   g_return_if_fail (GST_IS_XIMAGESINK (ximagesink));
   
-  gst_caps2_free (ximagesink->xcontext->caps);
+  gst_caps_free (ximagesink->xcontext->caps);
   
   g_mutex_lock (ximagesink->x_lock);
   
@@ -498,7 +498,7 @@ gst_ximagesink_xcontext_clear (GstXImageSink *ximagesink)
 
 /* Element stuff */
 
-static GstCaps2 *
+static GstCaps *
 gst_ximagesink_getcaps (GstPad *pad)
 {
   GstXImageSink *ximagesink;
@@ -506,16 +506,16 @@ gst_ximagesink_getcaps (GstPad *pad)
   ximagesink = GST_XIMAGESINK (gst_pad_get_parent (pad));
   
   if (ximagesink->xcontext)
-    return gst_caps2_copy (ximagesink->xcontext->caps);
+    return gst_caps_copy (ximagesink->xcontext->caps);
 
-  return gst_caps2_from_string ("video/x-raw-rgb, "
+  return gst_caps_from_string ("video/x-raw-rgb, "
       "framerate = (double) [ 0, MAX ], "
       "width = (int) [ 0, MAX ], "
       "height = (int) [ 0, MAX ]");
 }
 
 static GstPadLinkReturn
-gst_ximagesink_sinkconnect (GstPad *pad, const GstCaps2 *caps)
+gst_ximagesink_sinkconnect (GstPad *pad, const GstCaps *caps)
 {
   GstXImageSink *ximagesink;
   char *caps_str1, *caps_str2;
@@ -527,15 +527,15 @@ gst_ximagesink_sinkconnect (GstPad *pad, const GstCaps2 *caps)
   if (!ximagesink->xcontext)
     return GST_PAD_LINK_DELAYED;
   
-  caps_str1 = gst_caps2_to_string (ximagesink->xcontext->caps);
-  caps_str2 = gst_caps2_to_string (caps);
+  caps_str1 = gst_caps_to_string (ximagesink->xcontext->caps);
+  caps_str2 = gst_caps_to_string (caps);
 
   GST_DEBUG ("sinkconnect %s with %s", caps_str1, caps_str2);
 
   g_free (caps_str1);
   g_free (caps_str2);
 
-  structure = gst_caps2_get_nth_cap (caps, 0);
+  structure = gst_caps_get_structure (caps, 0);
   ret = gst_structure_get_int (structure, "width",
       &(GST_VIDEOSINK_WIDTH (ximagesink)));
   ret &= gst_structure_get_int (structure, "height",
