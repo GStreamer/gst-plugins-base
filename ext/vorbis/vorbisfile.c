@@ -435,6 +435,10 @@ gst_vorbisfile_get_metadata (VorbisFile *vorbisfile)
   if (vorbisfile->have_metadata)
     return TRUE;
 
+  /* check if we have opened vf or not */
+  if (vf->datasource == NULL)
+    return FALSE;
+
   /* clear old one */
   if (vorbisfile->metadata) {
     gst_caps_unref (vorbisfile->metadata);
