@@ -474,6 +474,9 @@ gst_vorbisdec_loop (GstElement * element)
 
   /* OK, clean up the framer */
   ogg_sync_clear (&oy);
+
+  /* FIXME: this might be wrong, or deprecated, so please let me know */
+  gst_element_set_eos (element);
 }
 
 static void 
