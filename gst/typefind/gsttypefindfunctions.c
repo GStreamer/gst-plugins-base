@@ -65,18 +65,12 @@ au_type_find (GstTypeFind *tf, gpointer unused)
 static void
 avi_type_find (GstTypeFind *tf, gpointer unused)
 {
-  guint8 *data = gst_type_find_peek (tf, 0, 4);
+  guint8 *data = gst_type_find_peek (tf, 0, 12);
 
-  if (data) {
-    if (memcmp (data, "RIFF", 4) == 0) {
-      data = gst_type_find_peek (tf, 8, 4);
-      if (data) {
-	if (memcmp (data, "AVI ", 4) == 0)
-	  gst_type_find_suggest (tf, GST_TYPE_FIND_MAXIMUM, AVI_CAPS);
-      } else {
-	gst_type_find_suggest (tf, GST_TYPE_FIND_POSSIBLE, AVI_CAPS);
-      }
-    }
+  if (data && memcmp (data, "RIFF", 4) == 0) {
+    data += 8;
+    if (memcmp (data, "AVI ", 4) == 0)
+      gst_type_find_suggest (tf, GST_TYPE_FIND_MAXIMUM, AVI_CAPS);
   }
 }
 
@@ -88,16 +82,10 @@ cdxa_type_find (GstTypeFind *tf, gpointer unused)
 {
   guint8 *data = gst_type_find_peek (tf, 0, 4);
 
-  if (data) {
-    if (memcmp (data, "RIFF", 4) == 0) {
-      data = gst_type_find_peek (tf, 8, 4);
-      if (data) {
-	if (memcmp (data, "CDXA", 4) == 0)
-	  gst_type_find_suggest (tf, GST_TYPE_FIND_MAXIMUM, CDXA_CAPS);
-      } else {
-	gst_type_find_suggest (tf, GST_TYPE_FIND_POSSIBLE, CDXA_CAPS);
-      }
-    }
+  if (data && memcmp (data, "RIFF", 4) == 0) {
+    data += 8;
+    if (memcmp (data, "CDXA", 4) == 0)
+      gst_type_find_suggest (tf, GST_TYPE_FIND_MAXIMUM, CDXA_CAPS);
   }
 }
 
@@ -466,16 +454,10 @@ wav_type_find (GstTypeFind *tf, gpointer unused)
 {
   guint8 *data = gst_type_find_peek (tf, 0, 4);
 
-  if (data) {
-    if (memcmp (data, "RIFF", 4) == 0) {
-      data = gst_type_find_peek (tf, 8, 4);
-      if (data) {
-	if (memcmp (data, "WAVE", 4) == 0)
-	  gst_type_find_suggest (tf, GST_TYPE_FIND_MAXIMUM, AVI_CAPS);
-      } else {
-	gst_type_find_suggest (tf, GST_TYPE_FIND_POSSIBLE, AVI_CAPS);
-      }
-    }
+  if (data && memcmp (data, "RIFF", 4) == 0) {
+    data += 8;
+    if (memcmp (data, "WAVE", 4) == 0)
+      gst_type_find_suggest (tf, GST_TYPE_FIND_MAXIMUM, WAV_CAPS);
   }
 }
       
@@ -551,8 +533,6 @@ mod_type_find (GstTypeFind *tf, gpointer unused)
 	  gst_type_find_suggest (tf, GST_TYPE_FIND_MAXIMUM, MOD_CAPS);
 	  return;
 	}
-      } else {
-	gst_type_find_suggest (tf, GST_TYPE_FIND_POSSIBLE, MOD_CAPS);
       }
     }
     /* FAM */
@@ -627,7 +607,7 @@ swf_type_find (GstTypeFind *tf, gpointer unused)
 
 /*** application/ogg **********************************************************/
 
-#define OGG_CAPS gst_caps_new ("flac_type_find", "application/ogg", NULL)
+#define OGG_CAPS gst_caps_new ("ogg_type_find", "application/ogg", NULL)
 static void
 ogg_type_find (GstTypeFind *tf, gpointer unused)
 {
