@@ -1,0 +1,74 @@
+Mental note for whoever first gets to port this to 0.9:
+- before you do this, remove spider. It´s declared dead, kill it.
+- read this document for some autoplugging wishes for 0.9.
+
+Now, decodebin needs to replace spider, and fix some implicit bugs:
+- known types on input need to be handled.
+- unknown types on internally created pads need to be handled.
+Those are both the same bug really. Decodebin creates a typefind element
+for detecting the input format, even though that´s not required. Then,
+it listens for have-type and plugs from there. Instead, it should do
+a simplified loop where, for each newly created pad (of which its own
+sinkpad is one), it checks if the type is known. If so, plug an element
+and go back to the start of this loop. If not, add typefind, wait for
+caps to be set (or have-type), and continue plugging as said. In code:
+
+void
+plug_one (in_pad)
+{
+  el = find_compatible_element (in_pad);
+  gst_pad_link (in_pad, gst_element_get_pad (el, "sink"));
+  foreach pad in gst_element_get_src_pads (el) {
+    plug (pad);
+  }
+}
+
+void
+cb_type (GstElement * tf)
+{
+  /* the caps were set on the pad already */
+  plug_one (gst_element_get_pad (tf, "src"));
+  // disconnect signal here or so...
+}
+
+void
+find_type (in_pad)
+{
+  typefind = gst_element_factory_make ("typefind");
+  gst_pad_link (in_pad, gst_element_get_pad (typefind, "sink"));
+  g_signal_connect (typefind, "have-type", G_CALLBACK (cb_type), NULL);
+}
+
+void
+plug (in_pad)
+{
+  if (is_raw_type (pad)) {
+    gst_element_add_ghost_pad (this, in_pad, "some-name");
+  } else if (type_known (pad)) {
+    plug_one (pad);
+  } else {
+    find_type (pad);
+  }
+}
+
+void
+sink_link (in_pad)
+{
+  plug (in_pad);
+}
+
+(Note that the above example code doesn't actually work because we mix
+up sink/source pads, but it´s just to give an idea.)
+
+The consequence is that we can use decodebin as an immediate replacement
+for spider: gst-launch somesrc ! decodebin ! somesink, regardless of
+whether the type is known (or at all detectable, e.g. cdparanoia). It
+decreases plugging latency for known types (which is a nice enhancement,
+even though not necessarily a bug) and, best of all, allows us to remove
+typefinding hacks in oggdemux (*), id3demux, apedemux and some more.
+
+(*) for oggdemux, we may not necessarily want this. Typefinding in Ogg
+files is incredibly simple, because the first page *has* to contain
+the type, as stated in the Ogg spec. Adding typefind here might actually
+*increase* latency. That said, we can simply leave typefinding code in
+oggdemux and be done with it. It´s just not necessarily *required*.
