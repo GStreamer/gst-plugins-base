@@ -200,13 +200,13 @@ gst_videotestsrc_src_fixate (GstPad * pad, const GstCaps2 * caps,
     return newcaps;
   }
 
-  if (gst_caps_structure_fixate_field_nearest_int (structure, "width", 320)) {
+  if (gst_caps2_structure_fixate_field_nearest_int (structure, "width", 320)) {
     return newcaps;
   }
-  if (gst_caps_structure_fixate_field_nearest_int (structure, "height", 240)) {
+  if (gst_caps2_structure_fixate_field_nearest_int (structure, "height", 240)) {
     return newcaps;
   }
-  if (gst_caps_structure_fixate_field_nearest_double (structure, "framerate",
+  if (gst_caps2_structure_fixate_field_nearest_double (structure, "framerate",
 	30.0)) {
     return newcaps;
   }
