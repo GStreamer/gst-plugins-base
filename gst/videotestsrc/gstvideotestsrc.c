@@ -189,6 +189,28 @@ gst_videotestsrc_srcconnect (GstPad * pad, GstCaps * caps)
   GST_DEBUG (0, "gst_videotestsrc_srcconnect");
   videotestsrc = GST_VIDEOTESTSRC (gst_pad_get_parent (pad));
 
+  if(!GST_CAPS_IS_FIXED(caps)){
+    GST_DEBUG (0, "caps not fixed\n");
+    return GST_PAD_LINK_DELAYED;
+  }
+
+  if(GST_CAPS_IS_CHAINED(caps)){
+    GstCaps *caps1 = gst_caps_copy_1(caps);
+    GstPadLinkReturn ret;
+
+    GST_DEBUG (0, "caps chained\n");
+
+    ret = gst_pad_try_set_caps(pad, caps1);
+    GST_DEBUG (0, "try_set_caps returned %d\n", ret);
+
+    if(ret!=GST_PAD_LINK_OK){
+      gst_caps_unref(caps1);
+      return ret;
+    }
+
+    caps = caps1;
+  }
+
   videotestsrc->fourcc = paintinfo_find_by_caps(caps);
   if(!videotestsrc->fourcc){
     return GST_PAD_LINK_DELAYED;
