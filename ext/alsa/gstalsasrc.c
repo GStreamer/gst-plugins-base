@@ -374,6 +374,8 @@ gst_alsa_src_loop (GstElement * element)
         gst_alsa_samples_to_timestamp (this, this->transmitted);
     GST_BUFFER_DURATION (src->buf[i]) =
         gst_alsa_samples_to_timestamp (this, copied);
+    GST_BUFFER_OFFSET (src->buf[i]) = this->transmitted;
+    GST_BUFFER_OFFSET_END (src->buf[i]) = this->transmitted + copied;
     buf = src->buf[i];
     src->buf[i] = NULL;
     gst_pad_push (this->pad[i], GST_DATA (buf));
