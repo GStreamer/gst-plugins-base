@@ -622,7 +622,7 @@ cdparanoia_open (CDParanoia *src)
 
   /* fail if the device couldn't be found */
   if (src->d == NULL) {
-    GST_DEBUG (0, "couldn't open device");
+    gst_element_error (GST_ELEMENT (src), "Couldn't open device");
     return FALSE;
   }
 
@@ -637,7 +637,7 @@ cdparanoia_open (CDParanoia *src)
 
   /* open the disc */
   if (cdda_open (src->d)) {
-    GST_DEBUG (0, "couldn't open disc");
+    gst_element_error (GST_ELEMENT (src), "Could not open disk");
     cdda_close (src->d);
     src->d = NULL;
     return FALSE;
@@ -676,7 +676,7 @@ cdparanoia_open (CDParanoia *src)
   /* create the paranoia struct and set it up */
   src->p = paranoia_init (src->d);
   if (src->p == NULL) {
-    GST_DEBUG (0, "couldn't create paranoia struct");
+    gst_element_error (GST_ELEMENT (src), "Couldn't create paranoia struct");
     return FALSE;
   }
 
@@ -789,7 +789,7 @@ cdparanoia_event (GstPad *pad, GstEvent *event)
   src = CDPARANOIA (gst_pad_get_parent (pad));
 
   if (!GST_FLAG_IS_SET (src, CDPARANOIA_OPEN)) {
-		g_print ("Not open\n");
+		gst_element_error (GST_ELEMENT (src), "Not open");
     goto error;
 	}
 
@@ -817,7 +817,7 @@ cdparanoia_event (GstPad *pad, GstEvent *event)
       }
       
       if (!res) {
-				GST_DEBUG (0, "could not convert offsets to sectors");
+				gst_element_error (GST_ELEMENT (src), "Could not convert offsets to sectors");
 				goto error;
       }
       
