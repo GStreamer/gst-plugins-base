@@ -693,6 +693,10 @@ gst_gnomevfssrc_received_headers_callback (gconstpointer in,
         GnomeVFSModuleCallbackReceivedHeadersIn *in_args =
                 (GnomeVFSModuleCallbackReceivedHeadersIn *)in;
 
+	/* This is only used for internet radio stuff right now */
+	if (!src->iradio_mode)
+		return;
+
         for (i = in_args->headers; i; i = i->next) {
 		char *data = (char *) i->data;
 		char *key = data;
@@ -704,18 +708,6 @@ gst_gnomevfssrc_received_headers_callback (gconstpointer in,
 		g_strstrip(value);
 		if (!strlen(value))
 			continue;
-
-		if (!g_ascii_strncasecmp (data, "Content-Type:", 13))
-		{
-			GstCaps *caps = gst_pad_get_caps (src->srcpad);
-			gst_caps_set_mime (caps, value);
-			GST_DEBUG (0, "got Content-Type \"%s\", setting caps",
-				   value);
-		}
-
-		/* The rest of this stuff deals with Internet radio bits */
-		if (!src->iradio_mode)
-			return;
 
 		/* Icecast stuff */
                 if (!strncmp (data, "icy-metaint:", 12)) /* ugh */
@@ -1047,7 +1039,7 @@ static gboolean gst_gnomevfssrc_open_file(GstGnomeVFSSrc *src)
 
 		src->new_seek = TRUE;
 	} else {
-
+		GnomeVFSFileInfo *info;
 		if (!audiocast_init(src))
 			return FALSE;
 			
@@ -1067,33 +1059,27 @@ static gboolean gst_gnomevfssrc_open_file(GstGnomeVFSSrc *src)
 			return FALSE;
 		}
 
-		/* find the file length (but skip it in iradio mode,
-		 * since it will require a separate request, and we
-		 * know the length is undefined anyways) */
-		if (!src->iradio_mode)
+		info = gnome_vfs_file_info_new ();
+		if (gnome_vfs_get_file_info_from_handle (src->handle, info,
+							 GNOME_VFS_FILE_INFO_DEFAULT) == GNOME_VFS_OK)
 		{
-			GnomeVFSResult size_result;
-			GnomeVFSFileInfo *info;
-
-			info = gnome_vfs_file_info_new ();
-			size_result = gnome_vfs_get_file_info_uri(src->uri,
-					info, GNOME_VFS_FILE_INFO_DEFAULT);
-
-			if (size_result != GNOME_VFS_OK)
-				src->size = 0;
-			else
+			if (info->valid_fields & GNOME_VFS_FILE_INFO_FIELDS_SIZE)
 				src->size = info->size;
-
-			gnome_vfs_file_info_unref(info);
+			if (info->valid_fields & GNOME_VFS_FILE_INFO_FIELDS_MIME_TYPE)
+			{
+				GST_DEBUG (0, "got MIME type \"%s\", setting caps",
+					   info->mime_type);
+				GstCaps *caps = gst_pad_get_caps (src->srcpad);
+				gst_caps_set_mime (caps, info->mime_type);
+			}
 		}
-		else
-			src->size = 0;
+		gnome_vfs_file_info_unref(info);
 
 		GST_DEBUG(0, "size %lld", src->size);
 
 		audiocast_do_notifications(src);
 	
-		GST_DEBUG(0, "open %s", gnome_vfs_result_to_string(result));
+		GST_DEBUG(0, "open %s", gnome_vfs_result_to_string (result));
 	}
 
 	GST_FLAG_SET(src, GST_GNOMEVFSSRC_OPEN);
