@@ -477,9 +477,12 @@ gst_vorbisfile_loop (GstElement *element)
   gint64 samples;
   gint link;
 
+  GST_DEBUG (GST_CAT_PLUGIN_INFO, "start of loop function");
+
   /* this function needs to go first since you don't want to be messing
    * with an unset vf ;) */
   if (vorbisfile->restart) {
+    GST_DEBUG (GST_CAT_PLUGIN_INFO, "restarting vorbisfile struct");
     vorbisfile->offset = 0;
     vorbisfile->total_bytes = 0;
     vorbisfile->may_eos = FALSE;
@@ -501,6 +504,7 @@ gst_vorbisfile_loop (GstElement *element)
 
   if (vorbisfile->seek_pending) {
     /* get time to seek to in seconds */
+    GST_DEBUG (GST_CAT_PLUGIN_INFO, "seek pending");
 
     switch (vorbisfile->seek_format) {
       case GST_FORMAT_TIME:
@@ -560,6 +564,8 @@ gst_vorbisfile_loop (GstElement *element)
     return;
   }
 
+  GST_DEBUG (GST_CAT_PLUGIN_INFO, "creating new buffer");
+
   outbuf = gst_buffer_new ();
   GST_BUFFER_DATA (outbuf) = g_malloc (4096);
   GST_BUFFER_SIZE (outbuf) = 4096;
@@ -573,7 +579,7 @@ gst_vorbisfile_loop (GstElement *element)
 		 sizeof (gint16), 1, &link);
 
   if (ret == 0) {
-    GST_DEBUG (0, "eos");
+    GST_DEBUG (GST_CAT_PLUGIN_INFO, "ov_read returned 0, eos");
     /* send EOS event */
     /*ov_clear (&vorbisfile->vf);*/
     vorbisfile->restart = TRUE;
