@@ -99,10 +99,11 @@ struct _GstGnomeVFSSrc {
 	GnomeVFSFileOffset curoffset;	/* current offset in file */
 	gulong bytes_per_read;		/* bytes per read */
 	gboolean new_seek;
+	gboolean in_first_get;
 
 	/* icecast/audiocast metadata extraction handling */
 	gboolean iradio_mode;
-	gboolean iradio_callbacks_pushed;
+	gboolean http_callbacks_pushed;
 
 	gint icy_metaint;
 	GnomeVFSFileSize icy_count;
@@ -311,11 +312,12 @@ static void gst_gnomevfssrc_init(GstGnomeVFSSrc *gnomevfssrc)
 	gnomevfssrc->curoffset = 0;
 	gnomevfssrc->bytes_per_read = 4096;
 	gnomevfssrc->new_seek = FALSE;
+	gnomevfssrc->in_first_get = TRUE;
 
 	gnomevfssrc->icy_metaint = 0;
 
 	gnomevfssrc->iradio_mode = FALSE;
-	gnomevfssrc->iradio_callbacks_pushed = FALSE;
+	gnomevfssrc->http_callbacks_pushed = FALSE;
 	gnomevfssrc->icy_count = 0;
 	gnomevfssrc->iradio_name = NULL;
 	gnomevfssrc->iradio_genre = NULL;
@@ -691,12 +693,9 @@ gst_gnomevfssrc_received_headers_callback (gconstpointer in,
         GnomeVFSModuleCallbackReceivedHeadersIn *in_args =
                 (GnomeVFSModuleCallbackReceivedHeadersIn *)in;
 
-	if (!src->iradio_mode)
-		return;
-
         for (i = in_args->headers; i; i = i->next) {
 		char *data = (char *) i->data;
-		char *key;
+		char *key = data;
 		char *value = strchr(data, ':');
 		if (!value)
 			continue;
@@ -705,6 +704,18 @@ gst_gnomevfssrc_received_headers_callback (gconstpointer in,
 		g_strstrip(value);
 		if (!strlen(value))
 			continue;
+
+		if (!g_ascii_strncasecmp (data, "Content-Type:", 13))
+		{
+			GstCaps *caps = gst_pad_get_caps (src->srcpad);
+			gst_caps_set_mime (caps, value);
+			GST_DEBUG (0, "got Content-Type \"%s\", setting caps",
+				   value);
+		}
+
+		/* The rest of this stuff deals with Internet radio bits */
+		if (!src->iradio_mode)
+			return;
 
 		/* Icecast stuff */
                 if (!strncmp (data, "icy-metaint:", 12)) /* ugh */
@@ -747,7 +758,7 @@ gst_gnomevfssrc_received_headers_callback (gconstpointer in,
 static void
 gst_gnomevfssrc_push_callbacks (GstGnomeVFSSrc *gnomevfssrc)
 {
-	if (gnomevfssrc->iradio_callbacks_pushed)
+	if (gnomevfssrc->http_callbacks_pushed)
 		return;
 
 	GST_DEBUG (0,"pushing callbacks");
@@ -760,13 +771,13 @@ gst_gnomevfssrc_push_callbacks (GstGnomeVFSSrc *gnomevfssrc)
 					gnomevfssrc,
 					NULL);
 
-	gnomevfssrc->iradio_callbacks_pushed = TRUE;
+	gnomevfssrc->http_callbacks_pushed = TRUE;
 }
 
 static void
 gst_gnomevfssrc_pop_callbacks (GstGnomeVFSSrc *gnomevfssrc)
 {
-	if (!gnomevfssrc->iradio_callbacks_pushed)
+	if (!gnomevfssrc->http_callbacks_pushed)
 		return;
 
 	GST_DEBUG (0,"popping callbacks");
@@ -820,7 +831,7 @@ gst_gnomevfssrc_get_icy_metadata (GstGnomeVFSSrc *src)
 	
 	for (i = 0; tags[i]; i++)
 	{
-		if (!g_strncasecmp(tags[i], "StreamTitle=", 12))
+		if (!g_ascii_strncasecmp(tags[i], "StreamTitle=", 12))
 		{
 			if (src->iradio_title)
 				g_free (src->iradio_title);
@@ -828,7 +839,7 @@ gst_gnomevfssrc_get_icy_metadata (GstGnomeVFSSrc *src)
 			GST_DEBUG(0, "sending notification on icecast title");
 			g_object_notify (G_OBJECT (src), "iradio-title");
 		}
-		if (!g_strncasecmp(tags[i], "StreamUrl=", 10))
+		if (!g_ascii_strncasecmp(tags[i], "StreamUrl=", 10))
 		{
 			if (src->iradio_url)
 				g_free (src->iradio_url);
@@ -913,8 +924,8 @@ static GstBuffer *gst_gnomevfssrc_get(GstPad *pad)
 		g_return_val_if_fail (GST_BUFFER_DATA (buf) != NULL, NULL);
 
 		GST_BUFFER_SIZE (buf) = 0;
-		/* FIXME GROSS HACK: We try to read in at least 2900
-		 * bytes of data so that typefinding will work. */
+		/* FIXME GROSS HACK: We try to read in at least 8000
+		 * bytes of data so that mp3 typefinding will work. */
 		do
 		{
 			GST_DEBUG (0,"doing read: icy_count: %Lu", src->icy_count);
@@ -926,7 +937,7 @@ static GstBuffer *gst_gnomevfssrc_get(GstPad *pad)
 			if (readbytes == 0) {
 				gst_buffer_unref (buf);
 				gst_element_set_eos (GST_ELEMENT (src));
-				
+				src->in_first_get = FALSE;
 				return GST_BUFFER (gst_event_new (GST_EVENT_EOS));
 			}
 			
@@ -939,7 +950,8 @@ static GstBuffer *gst_gnomevfssrc_get(GstPad *pad)
 				gst_gnomevfssrc_get_icy_metadata (src);
 				src->icy_count = 0;
 			}
-		} while (GST_BUFFER_OFFSET (buf) < 8000 &&
+		} while (src->in_first_get
+			 && GST_BUFFER_OFFSET (buf) < 8000 &&
 			 src->icy_metaint - src->icy_count >= 8000);
 	} else {
 		/* allocate the space for the buffer data */
@@ -982,7 +994,7 @@ static GstBuffer *gst_gnomevfssrc_get(GstPad *pad)
 	}
 
 	GST_BUFFER_TIMESTAMP (buf) = -1;
-
+	src->in_first_get = FALSE;
 	/* we're done, return the buffer */
 	return buf;
 }
