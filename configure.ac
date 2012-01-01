@@ -176,7 +176,7 @@ AC_HEADER_STDC
 
 dnl used in gst/ffmpegcolorspace/mem.c
 dnl FIXME: could be fixed by redefining av_malloc and av_free to GLib's
-AC_CHECK_HEADERS([malloc.h])
+AC_CHECK_HEADERS([malloc.h], [], [], [AC_INCLUDES_DEFAULT])
 
 ac_cppflags_save="$CPPFLAGS"
 CPPFLAGS="`$PKG_CONFIG --cflags libxml-2.0`"
@@ -197,7 +197,7 @@ AM_CONDITIONAL(HAVE_LIBXML_HTML, test "x$HAVE_LIBXML_HTML" = "xyes")
 
 dnl used in gst/tcp
 AC_CHECK_HEADERS([sys/socket.h],
-  HAVE_SYS_SOCKET_H="yes", HAVE_SYS_SOCKET_H="no")
+  [HAVE_SYS_SOCKET_H="yes"], [HAVE_SYS_SOCKET_H="no"], [AC_INCLUDES_DEFAULT])
 AM_CONDITIONAL(HAVE_SYS_SOCKET_H, test "x$HAVE_SYS_SOCKET_H" = "xyes")
 
 dnl used in gst-libs/gst/rtsp
@@ -218,7 +218,7 @@ AC_SUBST(HSTRERROR_LIBS)
 LIBS="$save_libs"
 
 dnl used in gst-libs/gst/pbutils and associated unit test
-AC_CHECK_HEADERS([process.h sys/types.h sys/wait.h sys/stat.h])
+AC_CHECK_HEADERS([process.h sys/types.h sys/wait.h sys/stat.h], [], [], [AC_INCLUDES_DEFAULT])
 
 AC_CHECK_HEADERS([xmmintrin.h emmintrin.h])
 
@@ -535,7 +535,7 @@ AG_GST_CHECK_FEATURE(X, [X libraries and plugins],
   CPPFLAGS="$CPPFLAGS $X_CFLAGS"
 
   dnl now try to find the HEADER
-  AC_CHECK_HEADER(X11/Xlib.h, HAVE_X="yes", HAVE_X="no")
+  AC_CHECK_HEADER([X11/Xlib.h], [HAVE_X="yes"], [HAVE_X="no"], [AC_INCLUDES_DEFAULT])
 
   if test "x$HAVE_X" = "xno"
   then
