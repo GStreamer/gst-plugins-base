@@ -945,13 +945,11 @@ gst_video_decoder_do_seek (GstVideoDecoder * dec, GstEvent * event)
 }
 
 static gboolean
-gst_video_decoder_src_event (GstPad * pad, GstEvent * event)
+gst_video_decoder_src_eventfunc (GstVideoDecoder * decoder, GstEvent * event)
 {
-  GstVideoDecoder *decoder;
   GstVideoDecoderPrivate *priv;
   gboolean res = FALSE;
 
-  decoder = GST_VIDEO_DECODER (gst_pad_get_parent (pad));
   priv = decoder->priv;
 
   GST_DEBUG_OBJECT (decoder,
@@ -987,9 +985,13 @@ gst_video_decoder_src_event (GstPad * pad, GstEvent * event)
       /* ... though a non-time seek can be aided as well */
       /* First bring the requested format to time */
       tformat = GST_FORMAT_TIME;
-      if (!(res = gst_pad_query_convert (pad, format, cur, &tformat, &tcur)))
+      if (!(res =
+              gst_pad_query_convert (decoder->srcpad, format, cur, &tformat,
+                  &tcur)))
         goto convert_error;
-      if (!(res = gst_pad_query_convert (pad, format, stop, &tformat, &tstop)))
+      if (!(res =
+              gst_pad_query_convert (decoder->srcpad, format, stop, &tformat,
+                  &tstop)))
         goto convert_error;
 
       /* then seek with time on the peer */
@@ -1040,12 +1042,36 @@ gst_video_decoder_src_event (GstPad * pad, GstEvent * event)
       break;
   }
 done:
-  gst_object_unref (decoder);
   return res;
 
 convert_error:
   GST_DEBUG_OBJECT (decoder, "could not convert format");
   goto done;
+}
+
+static gboolean
+gst_video_decoder_src_event (GstPad * pad, GstEvent * event)
+{
+  GstVideoDecoder *decoder;
+  GstVideoDecoderClass *decoder_class;
+  gboolean ret = TRUE;
+  gboolean handled = FALSE;
+
+  decoder = GST_VIDEO_DECODER (gst_pad_get_parent (pad));
+  decoder_class = GST_VIDEO_DECODER_GET_CLASS (decoder);
+
+  GST_DEBUG_OBJECT (decoder, "received event %d, %s", GST_EVENT_TYPE (event),
+      GST_EVENT_TYPE_NAME (event));
+
+  if (decoder_class->src_event)
+    handled = decoder_class->src_event (decoder, event);
+
+  if (!handled)
+    handled = gst_video_decoder_src_eventfunc (decoder, event);
+
+  gst_object_unref (decoder);
+
+  return ret;
 }
 
 static const GstQueryType *
