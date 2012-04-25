@@ -596,6 +596,7 @@ refused_format:
     GST_VIDEO_DECODER_STREAM_UNLOCK (decoder);
     GST_WARNING_OBJECT (decoder, "Subclass refused caps");
     gst_video_codec_state_unref (state);
+    gst_object_unref (decoder);
     return FALSE;
   }
 }

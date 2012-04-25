@@ -659,9 +659,10 @@ gst_video_encoder_sink_getcaps (GstPad * pad)
     caps = klass->getcaps (encoder);
   else
     caps = gst_video_encoder_proxy_getcaps (encoder, NULL);
-  gst_object_unref (encoder);
 
   GST_LOG_OBJECT (encoder, "Returning caps %" GST_PTR_FORMAT, caps);
+
+  gst_object_unref (encoder);
 
   return caps;
 }
