@@ -1032,6 +1032,7 @@ gst_decode_bin_init (GstDecodeBin * decode_bin)
   decode_bin->max_size_buffers = DEFAULT_MAX_SIZE_BUFFERS;
   decode_bin->max_size_time = DEFAULT_MAX_SIZE_TIME;
 
+  decode_bin->post_stream_topology = DEFAULT_POST_STREAM_TOPOLOGY;
   decode_bin->expose_allstreams = DEFAULT_EXPOSE_ALL_STREAMS;
 }
 
