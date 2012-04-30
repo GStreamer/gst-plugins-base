@@ -1111,9 +1111,7 @@ gst_video_format_from_fourcc (guint32 fourcc)
 guint32
 gst_video_format_to_fourcc (GstVideoFormat format)
 {
-  g_return_val_if_fail (format != GST_VIDEO_FORMAT_UNKNOWN, 0);
-
-  if (format >= G_N_ELEMENTS (formats))
+  if (format == GST_VIDEO_FORMAT_UNKNOWN || format >= G_N_ELEMENTS (formats))
     return 0;
 
   return formats[format].fourcc;
@@ -1122,8 +1120,6 @@ gst_video_format_to_fourcc (GstVideoFormat format)
 const gchar *
 gst_video_format_to_string (GstVideoFormat format)
 {
-  g_return_val_if_fail (format != GST_VIDEO_FORMAT_UNKNOWN, NULL);
-
   if (format >= G_N_ELEMENTS (formats))
     return NULL;
 
@@ -1968,9 +1964,7 @@ gst_video_format_from_masks (gint depth, gint bpp, gint endianness,
 gboolean
 gst_video_format_is_rgb (GstVideoFormat format)
 {
-  g_return_val_if_fail (format != GST_VIDEO_FORMAT_UNKNOWN, 0);
-
-  if (format >= G_N_ELEMENTS (formats))
+  if (format == GST_VIDEO_FORMAT_UNKNOWN || format >= G_N_ELEMENTS (formats))
     return FALSE;
 
   return GST_VIDEO_FORMAT_INFO_IS_RGB (&formats[format].info);
@@ -1991,9 +1985,7 @@ gst_video_format_is_rgb (GstVideoFormat format)
 gboolean
 gst_video_format_is_yuv (GstVideoFormat format)
 {
-  g_return_val_if_fail (format != GST_VIDEO_FORMAT_UNKNOWN, 0);
-
-  if (format >= G_N_ELEMENTS (formats))
+  if (format == GST_VIDEO_FORMAT_UNKNOWN || format >= G_N_ELEMENTS (formats))
     return FALSE;
 
   return GST_VIDEO_FORMAT_INFO_IS_YUV (&formats[format].info);
@@ -2014,9 +2006,7 @@ gst_video_format_is_yuv (GstVideoFormat format)
 gboolean
 gst_video_format_is_gray (GstVideoFormat format)
 {
-  g_return_val_if_fail (format != GST_VIDEO_FORMAT_UNKNOWN, 0);
-
-  if (format >= G_N_ELEMENTS (formats))
+  if (format == GST_VIDEO_FORMAT_UNKNOWN || format >= G_N_ELEMENTS (formats))
     return FALSE;
 
   return GST_VIDEO_FORMAT_INFO_IS_GRAY (&formats[format].info);
@@ -2038,9 +2028,7 @@ gst_video_format_is_gray (GstVideoFormat format)
 gboolean
 gst_video_format_has_alpha (GstVideoFormat format)
 {
-  g_return_val_if_fail (format != GST_VIDEO_FORMAT_UNKNOWN, 0);
-
-  if (format >= G_N_ELEMENTS (formats))
+  if (format == GST_VIDEO_FORMAT_UNKNOWN || format >= G_N_ELEMENTS (formats))
     return FALSE;
 
   return GST_VIDEO_FORMAT_INFO_HAS_ALPHA (&formats[format].info);
@@ -2062,10 +2050,8 @@ gst_video_format_has_alpha (GstVideoFormat format)
 int
 gst_video_format_get_component_depth (GstVideoFormat format, int component)
 {
-  g_return_val_if_fail (format != GST_VIDEO_FORMAT_UNKNOWN, 0);
-
-  if (format >= G_N_ELEMENTS (formats))
-    return 0;
+  if (format == GST_VIDEO_FORMAT_UNKNOWN || format >= G_N_ELEMENTS (formats))
+    return 8;
 
   return GST_VIDEO_FORMAT_INFO_DEPTH (&formats[format].info, component);
 }
