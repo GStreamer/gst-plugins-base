@@ -1117,6 +1117,14 @@ gst_video_format_to_fourcc (GstVideoFormat format)
   return formats[format].fourcc;
 }
 
+/**
+ * gst_video_format_to_string:
+ * @format: a #GstVideoFormat video format
+ *
+ * Returns: a short string that describes @format, or #NULL
+ *
+ * Since: 0.10.37
+ */
 const gchar *
 gst_video_format_to_string (GstVideoFormat format)
 {
@@ -1133,6 +1141,8 @@ gst_video_format_to_string (GstVideoFormat format)
  * Get the #GstVideoFormatInfo for @format
  *
  * Returns: The #GstVideoFormatInfo for @format.
+ *
+ * Since: 0.10.37
  */
 const GstVideoFormatInfo *
 gst_video_format_get_info (GstVideoFormat format)
@@ -1148,6 +1158,8 @@ gst_video_format_get_info (GstVideoFormat format)
  * @info: a #GstVideoInfo
  *
  * Initialize @info with default values.
+ *
+ * Since: 0.10.37
  */
 void
 gst_video_info_init (GstVideoInfo * info)
@@ -1173,6 +1185,8 @@ gst_video_info_init (GstVideoInfo * info)
  * @height: a height
  *
  * Set the default info for a video frame of @format and @width and @height.
+ *
+ * Since: 0.10.37
  */
 void
 gst_video_info_set_format (GstVideoInfo * info, GstVideoFormat format,
@@ -1299,6 +1313,8 @@ gst_video_get_colorimetry (const gchar * s)
  * values.
  *
  * Returns: #TRUE if @color points to valid colorimetry info.
+ *
+ * Since: 0.10.37
  */
 gboolean
 gst_video_colorimetry_from_string (GstVideoColorimetry * cinfo,
@@ -1343,6 +1359,8 @@ gst_video_caps_set_colorimetry (GstCaps * caps, GstVideoColorimetry * cinfo)
  *
  * Returns: #TRUE if @color conveys the same colorimetry info as the color
  * information in @info.
+ *
+ * Since: 0.10.37
  */
 gboolean
 gst_video_colorimetry_matches (GstVideoColorimetry * cinfo, const gchar * color)
@@ -1363,6 +1381,8 @@ gst_video_colorimetry_matches (GstVideoColorimetry * cinfo, const gchar * color)
  * Parse @caps and update @info.
  *
  * Returns: TRUE if @caps could be parsed
+ *
+ * Since: 0.10.37
  */
 gboolean
 gst_video_info_from_caps (GstVideoInfo * info, const GstCaps * caps)
@@ -1534,6 +1554,8 @@ no_endianess:
  * Compares two #GstVideoInfo and returns whether they are equal or not
  *
  * Returns: %TRUE if @info and @other are equal, else %FALSE.
+ *
+ * Since: 0.10.37
  */
 gboolean
 gst_video_info_is_equal (const GstVideoInfo * info, const GstVideoInfo * other)
@@ -1569,6 +1591,8 @@ gst_video_info_is_equal (const GstVideoInfo * info, const GstVideoInfo * other)
  * Convert the values of @info into a #GstCaps.
  *
  * Returns: a new #GstCaps containing the info of @info.
+ *
+ * Since: 0.10.37
  */
 GstCaps *
 gst_video_info_to_caps (GstVideoInfo * info)

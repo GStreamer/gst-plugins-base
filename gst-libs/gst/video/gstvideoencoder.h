@@ -48,7 +48,7 @@ G_BEGIN_DECLS
  *
  * The name of the templates for the sink pad.
  *
- * Since: 0.10.36
+ * Since: 0.10.37
  */
 #define GST_VIDEO_ENCODER_SINK_NAME    "sink"
 /**
@@ -56,7 +56,7 @@ G_BEGIN_DECLS
  *
  * The name of the templates for the source pad.
  *
- * Since: 0.10.36
+ * Since: 0.10.37
  */
 #define GST_VIDEO_ENCODER_SRC_NAME     "src"
 
@@ -65,7 +65,7 @@ G_BEGIN_DECLS
  *
  * Returned when the event/buffer should be dropped.
  *
- * Since: 0.10.36
+ * Since: 0.10.37
  */
 #define GST_VIDEO_ENCODER_FLOW_DROPPED GST_FLOW_CUSTOM_SUCCESS_1
 
@@ -75,7 +75,7 @@ G_BEGIN_DECLS
  *
  * Gives the pointer to the source #GstPad object of the element.
  *
- * Since: 0.10.36
+ * Since: 0.10.37
  */
 #define GST_VIDEO_ENCODER_SRC_PAD(obj)         (((GstVideoEncoder *) (obj))->srcpad)
 
@@ -85,7 +85,7 @@ G_BEGIN_DECLS
  *
  * Gives the pointer to the sink #GstPad object of the element.
  *
- * Since: 0.10.36
+ * Since: 0.10.37
  */
 #define GST_VIDEO_ENCODER_SINK_PAD(obj)        (((GstVideoEncoder *) (obj))->sinkpad)
 
@@ -94,7 +94,7 @@ G_BEGIN_DECLS
  *
  * Returned while parsing to indicate more data is needed.
  *
- * Since: 0.10.36
+ * Since: 0.10.37
  **/
 #define GST_VIDEO_ENCODER_FLOW_NEED_DATA GST_FLOW_CUSTOM_SUCCESS
 
@@ -103,7 +103,7 @@ G_BEGIN_DECLS
  *
  * Returned when the event/buffer should be dropped.
  *
- * Since: 0.10.36
+ * Since: 0.10.37
  */
 #define GST_VIDEO_ENCODER_FLOW_DROPPED GST_FLOW_CUSTOM_SUCCESS_1
 
@@ -113,7 +113,7 @@ G_BEGIN_DECLS
  *
  * Gives the segment of the element.
  *
- * Since: 0.10.36
+ * Since: 0.10.37
  */
 #define GST_VIDEO_ENCODER_INPUT_SEGMENT(obj)     (GST_VIDEO_ENCODER_CAST (obj)->input_segment)
 
@@ -123,7 +123,7 @@ G_BEGIN_DECLS
  *
  * Gives the segment of the element.
  *
- * Since: 0.10.36
+ * Since: 0.10.37
  */
 #define GST_VIDEO_ENCODER_OUTPUT_SEGMENT(obj)     (GST_VIDEO_ENCODER_CAST (obj)->output_segment)
 
@@ -133,7 +133,7 @@ G_BEGIN_DECLS
  *
  * Obtain a lock to protect the encoder function from concurrent access.
  *
- * Since: 0.10.36
+ * Since: 0.10.37
  */
 #define GST_VIDEO_ENCODER_STREAM_LOCK(encoder) g_static_rec_mutex_lock (&GST_VIDEO_ENCODER (encoder)->stream_lock)
 
@@ -143,7 +143,7 @@ G_BEGIN_DECLS
  *
  * Release the lock that protects the encoder function from concurrent access.
  *
- * Since: 0.10.36
+ * Since: 0.10.37
  */
 #define GST_VIDEO_ENCODER_STREAM_UNLOCK(encoder) g_static_rec_mutex_unlock (&GST_VIDEO_ENCODER (encoder)->stream_lock)
 
@@ -156,7 +156,7 @@ typedef struct _GstVideoEncoderClass GstVideoEncoderClass;
  *
  * The opaque #GstVideoEncoder data structure.
  *
- * Since: 0.10.36
+ * Since: 0.10.37
  */
 struct _GstVideoEncoder
 {
@@ -177,8 +177,9 @@ struct _GstVideoEncoder
   GstSegment      output_segment;
 
   GstVideoEncoderPrivate *priv;
-  /* FIXME before moving to base */
-  void         *padding[GST_PADDING_LARGE];
+
+  /*< private >*/
+  gpointer        _gst_reserved[GST_PADDING_LARGE];
 };
 
 /**
@@ -227,7 +228,7 @@ struct _GstVideoEncoder
  * needed. At minimum @handle_frame needs to be overridden, and @set_format
  * and @get_caps are likely needed as well.
  *
- * Since: 0.10.36
+ * Since: 0.10.37
  */
 struct _GstVideoEncoderClass
 {
@@ -267,7 +268,6 @@ struct _GstVideoEncoderClass
 				 GstEvent *event);
 
   /*< private >*/
-  /* FIXME before moving to base */
   gpointer       _gst_reserved[GST_PADDING_LARGE];
 };
 

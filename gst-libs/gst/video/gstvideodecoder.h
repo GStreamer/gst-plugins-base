@@ -48,7 +48,7 @@ G_BEGIN_DECLS
  *
  * The name of the templates for the sink pad.
  *
- * Since: 0.10.36
+ * Since: 0.10.37
  */
 #define GST_VIDEO_DECODER_SINK_NAME    "sink"
 /**
@@ -56,7 +56,7 @@ G_BEGIN_DECLS
  *
  * The name of the templates for the source pad.
  *
- * Since: 0.10.36
+ * Since: 0.10.37
  */
 #define GST_VIDEO_DECODER_SRC_NAME     "src"
 
@@ -66,7 +66,7 @@ G_BEGIN_DECLS
  *
  * Gives the pointer to the source #GstPad object of the element.
  *
- * Since: 0.10.36
+ * Since: 0.10.37
  */
 #define GST_VIDEO_DECODER_SRC_PAD(obj)         (((GstVideoDecoder *) (obj))->srcpad)
 
@@ -76,7 +76,7 @@ G_BEGIN_DECLS
  *
  * Gives the pointer to the sink #GstPad object of the element.
  *
- * Since: 0.10.36
+ * Since: 0.10.37
  */
 #define GST_VIDEO_DECODER_SINK_PAD(obj)        (((GstVideoDecoder *) (obj))->sinkpad)
 /**
@@ -84,7 +84,7 @@ G_BEGIN_DECLS
  *
  * Returned while parsing to indicate more data is needed.
  *
- * Since: 0.10.36
+ * Since: 0.10.37
  **/
 #define GST_VIDEO_DECODER_FLOW_NEED_DATA GST_FLOW_CUSTOM_SUCCESS
 
@@ -93,7 +93,7 @@ G_BEGIN_DECLS
  *
  * Returned when the event/buffer should be dropped.
  *
- * Since: 0.10.36
+ * Since: 0.10.37
  */
 #define GST_VIDEO_DECODER_FLOW_DROPPED GST_FLOW_CUSTOM_SUCCESS_1
 
@@ -103,7 +103,7 @@ G_BEGIN_DECLS
  *
  * Gives the segment of the element.
  *
- * Since: 0.10.36
+ * Since: 0.10.37
  */
 #define GST_VIDEO_DECODER_INPUT_SEGMENT(obj)     (GST_VIDEO_DECODER_CAST (obj)->input_segment)
 
@@ -113,7 +113,7 @@ G_BEGIN_DECLS
  *
  * Gives the segment of the element.
  *
- * Since: 0.10.36
+ * Since: 0.10.37
  */
 #define GST_VIDEO_DECODER_OUTPUT_SEGMENT(obj)     (GST_VIDEO_DECODER_CAST (obj)->output_segment)
 
@@ -123,7 +123,7 @@ G_BEGIN_DECLS
  *
  * Obtain a lock to protect the decoder function from concurrent access.
  *
- * Since: 0.10.36
+ * Since: 0.10.37
  */
 #define GST_VIDEO_DECODER_STREAM_LOCK(decoder) g_static_rec_mutex_lock (&GST_VIDEO_DECODER (decoder)->stream_lock)
 
@@ -133,7 +133,7 @@ G_BEGIN_DECLS
  *
  * Release the lock that protects the decoder function from concurrent access.
  *
- * Since: 0.10.36
+ * Since: 0.10.37
  */
 #define GST_VIDEO_DECODER_STREAM_UNLOCK(decoder) g_static_rec_mutex_unlock (&GST_VIDEO_DECODER (decoder)->stream_lock)
 
@@ -170,7 +170,7 @@ GstFlowReturn _gst_video_decoder_error (GstVideoDecoder *dec, gint weight,
  * is logged. In either case, @ret is set to the proper value to
  * return to upstream/caller (indicating either GST_FLOW_ERROR or GST_FLOW_OK).
  *
- * Since: 0.10.36
+ * Since: 0.10.37
  */
 #define GST_VIDEO_DECODER_ERROR(el, w, domain, code, text, debug, ret) \
 G_STMT_START {                                                              \
@@ -187,7 +187,7 @@ G_STMT_START {                                                              \
  *
  * Default maximum number of errors tolerated before signaling error.
  *
- * Since: 0.10.36
+ * Since: 0.10.37
  */
 #define GST_VIDEO_DECODER_MAX_ERRORS     10
 
@@ -197,7 +197,7 @@ G_STMT_START {                                                              \
  *
  * The opaque #GstVideoDecoder data structure.
  *
- * Since: 0.10.36
+ * Since: 0.10.37
  */
 struct _GstVideoDecoder
 {
@@ -219,8 +219,8 @@ struct _GstVideoDecoder
 
   GstVideoDecoderPrivate *priv;
 
-  /* FIXME before moving to base */
-  void             *padding[GST_PADDING_LARGE];
+  /*< private >*/
+  gpointer        _gst_reserved[GST_PADDING_LARGE];
 };
 
 /**
@@ -261,7 +261,7 @@ struct _GstVideoDecoder
  * and likely as well.  If non-packetized input is supported or expected,
  * @parse needs to be overridden as well.
  *
- * Since: 0.10.36
+ * Since: 0.10.37
  */
 struct _GstVideoDecoderClass
 {
@@ -301,8 +301,7 @@ struct _GstVideoDecoderClass
 
 
   /*< private >*/
-  /* FIXME before moving to base */
-  void         *padding[GST_PADDING_LARGE];
+  gpointer       _gst_reserved[GST_PADDING_LARGE];
 };
 
 GType    gst_video_decoder_get_type (void);
