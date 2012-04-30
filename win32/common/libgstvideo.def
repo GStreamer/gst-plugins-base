@@ -38,7 +38,6 @@ EXPORTS
 	gst_video_decoder_set_max_errors
 	gst_video_decoder_set_output_state
 	gst_video_decoder_set_packetized
-	gst_video_decoder_set_src_caps
 	gst_video_encoder_finish_frame
 	gst_video_encoder_get_frame
 	gst_video_encoder_get_latency
