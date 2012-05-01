@@ -1815,18 +1815,18 @@ gst_video_decoder_prepare_finish_frame (GstVideoDecoder *
   }
 
   GST_LOG_OBJECT (decoder,
-      "finish frame (#%d) sync:%d pts:%" GST_TIME_FORMAT " dts:%"
+      "finish frame %p (#%d) sync:%d pts:%" GST_TIME_FORMAT " dts:%"
       GST_TIME_FORMAT " reorder_pts:%" GST_TIME_FORMAT,
-      frame->system_frame_number, GST_VIDEO_CODEC_FRAME_IS_SYNC_POINT (frame),
-      GST_TIME_ARGS (frame->pts), GST_TIME_ARGS (frame->dts),
-      GST_TIME_ARGS (reorder_pts));
+      frame, frame->system_frame_number,
+      GST_VIDEO_CODEC_FRAME_IS_SYNC_POINT (frame), GST_TIME_ARGS (frame->pts),
+      GST_TIME_ARGS (frame->dts), GST_TIME_ARGS (reorder_pts));
 
   /* Push all pending events that arrived before this frame */
   for (l = priv->frames; l; l = l->next) {
     GstVideoCodecFrame *tmp = l->data;
 
     if (tmp->events) {
-      events = tmp->events;
+      events = g_list_concat (events, tmp->events);
       tmp->events = NULL;
     }
 
@@ -1935,7 +1935,7 @@ gst_video_decoder_drop_frame (GstVideoDecoder * dec, GstVideoCodecFrame * frame)
   GstMessage *qos_msg;
   gdouble proportion;
 
-  GST_LOG_OBJECT (dec, "drop frame");
+  GST_LOG_OBJECT (dec, "drop frame %p", frame);
 
   GST_VIDEO_DECODER_STREAM_LOCK (dec);
 
@@ -1996,7 +1996,7 @@ gst_video_decoder_finish_frame (GstVideoDecoder * decoder,
   gint64 start, stop;
   GstSegment *segment;
 
-  GST_LOG_OBJECT (decoder, "finish frame");
+  GST_LOG_OBJECT (decoder, "finish frame %p", frame);
 
   if (G_UNLIKELY (priv->output_state_changed))
     gst_video_decoder_set_src_caps (decoder);
