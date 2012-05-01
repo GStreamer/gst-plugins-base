@@ -860,6 +860,7 @@ gst_video_encoder_sink_event (GstPad * pad, GstEvent * event)
       enc->priv->current_frame_events =
           g_list_prepend (enc->priv->current_frame_events, event);
       GST_VIDEO_ENCODER_STREAM_UNLOCK (enc);
+      ret = TRUE;
     }
   }
 
