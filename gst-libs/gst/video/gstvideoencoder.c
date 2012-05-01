@@ -1163,6 +1163,7 @@ gst_video_encoder_chain (GstPad * pad, GstBuffer * buf)
   GST_LOG_OBJECT (encoder, "passing frame pfn %d to subclass",
       frame->presentation_frame_number);
 
+  gst_video_codec_frame_ref (frame);
   ret = klass->handle_frame (encoder, frame);
 
 done:
@@ -1480,7 +1481,9 @@ gst_video_encoder_finish_frame (GstVideoEncoder * encoder,
 done:
   /* handed out */
   priv->frames = g_list_remove (priv->frames, frame);
-
+  /* Remove the reference from the list and the reference that
+   * was provided to us */
+  gst_video_codec_frame_unref (frame);
   gst_video_codec_frame_unref (frame);
 
   GST_VIDEO_ENCODER_STREAM_UNLOCK (encoder);
