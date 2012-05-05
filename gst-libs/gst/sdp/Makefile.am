@@ -26,7 +26,7 @@ GstSdp-@GST_MAJORMINOR@.gir: $(INTROSPECTION_SCANNER) libgstsdp-@GST_MAJORMINOR@
 		--strip-prefix=Gst \
 		$(gir_cincludes) \
 		-I$(top_srcdir)/gst-libs \
-		--add-include-path=`$(PKG_CONFIG) --variable=girdir gstreamer-@GST_MAJORMINOR@` \
+		--add-include-path=`PKG_CONFIG_PATH="$(GST_PKG_CONFIG_PATH)" $(PKG_CONFIG) --variable=girdir gstreamer-@GST_MAJORMINOR@` \
 		--library=libgstsdp-@GST_MAJORMINOR@.la \
 		--include=Gst-@GST_MAJORMINOR@ \
 		--libtool="$(top_builddir)/libtool" \
@@ -50,7 +50,7 @@ typelibs_DATA = $(BUILT_GIRSOURCES:.gir=.typelib)
 		$(INTROSPECTION_COMPILER) \
 		--includedir=$(srcdir) \
 		--includedir=$(builddir) \
-		--includedir=`$(PKG_CONFIG) --variable=girdir gstreamer-@GST_MAJORMINOR@` \
+		--includedir=`PKG_CONFIG_PATH="$(GST_PKG_CONFIG_PATH)" $(PKG_CONFIG) --variable=girdir gstreamer-@GST_MAJORMINOR@` \
 		$(INTROSPECTION_COMPILER_OPTS) $< -o $(@F)
 
 CLEANFILES = $(BUILT_GIRSOURCES) $(typelibs_DATA)

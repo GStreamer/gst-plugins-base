@@ -81,9 +81,9 @@ GstPbutils-@GST_MAJORMINOR@.gir: $(INTROSPECTION_SCANNER) libgstpbutils-@GST_MAJ
 		$(gir_cincludes) \
 		-I$(top_srcdir)/gst-libs \
 		-I$(top_builddir)/gst-libs \
-		--add-include-path=`$(PKG_CONFIG) --variable=girdir gstreamer-@GST_MAJORMINOR@` \
+		--add-include-path=`PKG_CONFIG_PATH="$(GST_PKG_CONFIG_PATH)" $(PKG_CONFIG) --variable=girdir gstreamer-@GST_MAJORMINOR@` \
 		--library=libgstpbutils-@GST_MAJORMINOR@.la \
-		--library-path=`$(PKG_CONFIG) --variable=libdir gstreamer-@GST_MAJORMINOR@` \
+		--library-path=`PKG_CONFIG_PATH="$(GST_PKG_CONFIG_PATH)" $(PKG_CONFIG) --variable=libdir gstreamer-@GST_MAJORMINOR@` \
 		--library=gstreamer-@GST_MAJORMINOR@ \
 		--include=Gst-@GST_MAJORMINOR@ \
 		--libtool="$(top_builddir)/libtool" \
@@ -108,7 +108,7 @@ typelibs_DATA = $(BUILT_GIRSOURCES:.gir=.typelib)
 		$(INTROSPECTION_COMPILER) \
 		--includedir=$(srcdir) \
 		--includedir=$(builddir) \
-		--includedir=`$(PKG_CONFIG) --variable=girdir gstreamer-@GST_MAJORMINOR@` \
+		--includedir=`PKG_CONFIG_PATH="$(GST_PKG_CONFIG_PATH)" $(PKG_CONFIG) --variable=girdir gstreamer-@GST_MAJORMINOR@` \
 		$(INTROSPECTION_COMPILER_OPTS) $< -o $(@F)
 
 CLEANFILES += $(BUILT_GIRSOURCES) $(typelibs_DATA)

@@ -71,8 +71,8 @@ GstVideo-@GST_MAJORMINOR@.gir: $(INTROSPECTION_SCANNER) libgstvideo-@GST_MAJORMI
 		$(gir_cincludes) \
 		-I$(top_srcdir)/gst-libs \
 		-I$(top_builddir)/gst-libs \
-		--add-include-path=`$(PKG_CONFIG) --variable=girdir gstreamer-@GST_MAJORMINOR@` \
-		--add-include-path=`$(PKG_CONFIG) --variable=girdir gstreamer-base-@GST_MAJORMINOR@` \
+		--add-include-path=`PKG_CONFIG_PATH="$(GST_PKG_CONFIG_PATH)" $(PKG_CONFIG) --variable=girdir gstreamer-@GST_MAJORMINOR@` \
+		--add-include-path=`PKG_CONFIG_PATH="$(GST_PKG_CONFIG_PATH)" $(PKG_CONFIG) --variable=girdir gstreamer-base-@GST_MAJORMINOR@` \
 		--library=libgstvideo-@GST_MAJORMINOR@.la \
 		--include=Gst-@GST_MAJORMINOR@ \
 		--include=GstBase-@GST_MAJORMINOR@ \
@@ -99,8 +99,8 @@ typelibs_DATA = $(BUILT_GIRSOURCES:.gir=.typelib)
 		$(INTROSPECTION_COMPILER) \
 		--includedir=$(srcdir) \
 		--includedir=$(builddir) \
-		--includedir=`$(PKG_CONFIG) --variable=girdir gstreamer-@GST_MAJORMINOR@` \
-		--includedir=`$(PKG_CONFIG) --variable=girdir gstreamer-base-@GST_MAJORMINOR@` \
+		--includedir=`PKG_CONFIG_PATH="$(GST_PKG_CONFIG_PATH)" $(PKG_CONFIG) --variable=girdir gstreamer-@GST_MAJORMINOR@` \
+		--includedir=`PKG_CONFIG_PATH="$(GST_PKG_CONFIG_PATH)" $(PKG_CONFIG) --variable=girdir gstreamer-base-@GST_MAJORMINOR@` \
 		$(INTROSPECTION_COMPILER_OPTS) $< -o $(@F)
 
 CLEANFILES += $(BUILT_GIRSOURCES) $(typelibs_DATA)

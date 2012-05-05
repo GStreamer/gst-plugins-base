@@ -36,8 +36,8 @@ GstRiff-@GST_MAJORMINOR@.gir: $(INTROSPECTION_SCANNER) libgstriff-@GST_MAJORMINO
 		--add-include-path=$(builddir)/../tag \
 		--add-include-path=$(builddir)/../audio \
 		--add-include-path=$(builddir)/../interfaces \
-		--add-include-path=`$(PKG_CONFIG) --variable=girdir gstreamer-@GST_MAJORMINOR@` \
-		--add-include-path=`$(PKG_CONFIG) --variable=girdir gstreamer-base-@GST_MAJORMINOR@` \
+		--add-include-path=`PKG_CONFIG_PATH="$(GST_PKG_CONFIG_PATH)" $(PKG_CONFIG) --variable=girdir gstreamer-@GST_MAJORMINOR@` \
+		--add-include-path=`PKG_CONFIG_PATH="$(GST_PKG_CONFIG_PATH)" $(PKG_CONFIG) --variable=girdir gstreamer-base-@GST_MAJORMINOR@` \
 		--library=libgstriff-@GST_MAJORMINOR@.la \
 		--include=GstAudio-@GST_MAJORMINOR@ \
 		--include=GstTag-@GST_MAJORMINOR@ \
@@ -70,8 +70,8 @@ typelibs_DATA = $(BUILT_GIRSOURCES:.gir=.typelib)
 		--includedir=$(builddir)/../tag \
 		--includedir=$(builddir)/../audio \
 		--includedir=$(builddir)/../interfaces \
-		--includedir=`$(PKG_CONFIG) --variable=girdir gstreamer-@GST_MAJORMINOR@` \
-		--includedir=`$(PKG_CONFIG) --variable=girdir gstreamer-base-@GST_MAJORMINOR@` \
+		--includedir=`PKG_CONFIG_PATH="$(GST_PKG_CONFIG_PATH)" $(PKG_CONFIG) --variable=girdir gstreamer-@GST_MAJORMINOR@` \
+		--includedir=`PKG_CONFIG_PATH="$(GST_PKG_CONFIG_PATH)" $(PKG_CONFIG) --variable=girdir gstreamer-base-@GST_MAJORMINOR@` \
 		$(INTROSPECTION_COMPILER_OPTS) $< -o $(@F)
 
 CLEANFILES = $(BUILT_GIRSOURCES) $(typelibs_DATA)
