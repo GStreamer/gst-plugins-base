@@ -1204,6 +1204,7 @@ static GstElement *
 gen_source_element (GstURIDecodeBin * decoder)
 {
   GstElement *source;
+  GParamSpec *pspec;
 
   if (!decoder->uri)
     goto no_uri;
@@ -1237,13 +1238,32 @@ gen_source_element (GstURIDecodeBin * decoder)
     g_object_set (source, "iradio-mode", TRUE, NULL);
   }
 
-  if (g_object_class_find_property (G_OBJECT_GET_CLASS (source),
-          "connection-speed")) {
-    GST_DEBUG_OBJECT (decoder,
-        "setting connection-speed=%d to source element",
-        decoder->connection_speed / 1000);
-    g_object_set (source, "connection-speed",
-        decoder->connection_speed / 1000, NULL);
+  if ((pspec = g_object_class_find_property (G_OBJECT_GET_CLASS (source),
+              "connection-speed"))) {
+    guint speed = decoder->connection_speed / 1000;
+    gboolean wrong_type = FALSE;
+
+    if (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_UINT) {
+      GParamSpecUInt *pspecuint = G_PARAM_SPEC_UINT (pspec);
+
+      speed = CLAMP (speed, pspecuint->minimum, pspecuint->maximum);
+    } else if (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_INT) {
+      GParamSpecInt *pspecint = G_PARAM_SPEC_INT (pspec);
+
+      speed = CLAMP (speed, pspecint->minimum, pspecint->maximum);
+    } else {
+      GST_WARNING_OBJECT (decoder, "The connection speed property %i of type %s"
+          " is not usefull not setting it", speed,
+          g_type_name (G_PARAM_SPEC_TYPE (pspec)));
+      wrong_type = TRUE;
+    }
+
+    if (wrong_type == FALSE) {
+      g_object_set (source, "connection-speed", speed, NULL);
+
+      GST_DEBUG_OBJECT (decoder,
+          "setting connection-speed=%d to source element", speed);
+    }
   }
   if (g_object_class_find_property (G_OBJECT_GET_CLASS (source),
           "subtitle-encoding")) {
