@@ -559,24 +559,77 @@ _remove_element (GstSubtitleOverlay * self, GstElement ** element)
   }
 }
 
+static gboolean
+_pad_query_convert_to_time (GstPad * pad, GstFormat src_format, gint64 src_val,
+    gint64 * dest_val)
+{
+  GstFormat dest_format;
+
+  if (src_val == GST_CLOCK_TIME_NONE) {
+    *dest_val = GST_CLOCK_TIME_NONE;
+    return TRUE;
+  }
+
+  dest_format = GST_FORMAT_TIME;
+  return gst_pad_query_convert (pad, src_format, src_val, &dest_format,
+      dest_val);
+}
+
 static void
-_generate_update_newsegment_event (GstSegment * segment, GstEvent ** event1,
-    GstEvent ** event2)
+_generate_update_newsegment_event (GstPad * pad, GstSegment * segment,
+    GstEvent ** event1, GstEvent ** event2)
 {
   GstEvent *event;
+  gboolean res;
+  gint64 accum = GST_CLOCK_TIME_NONE;
+  gint64 start = 0;
+  gint64 stop = GST_CLOCK_TIME_NONE;
+  gint64 time = 0;
 
   *event1 = NULL;
   *event2 = NULL;
 
+  /* always push newsegment with format TIME */
+  if (segment->format != GST_FORMAT_TIME) {
+    GstPad *peer;
+
+    peer = gst_pad_get_peer (pad);
+    if (peer) {
+      res = _pad_query_convert_to_time (peer, segment->format,
+          segment->accum, &accum);
+      if (!res) {
+        accum = GST_CLOCK_TIME_NONE;
+      }
+
+      res = _pad_query_convert_to_time (peer, segment->format,
+          segment->start, &start);
+      res = res && _pad_query_convert_to_time (peer, segment->format,
+          segment->stop, &stop);
+      res = res && _pad_query_convert_to_time (peer, segment->format,
+          segment->time, &time);
+      if (!res) {
+        start = 0;
+        stop = GST_CLOCK_TIME_NONE;
+        time = 0;
+      }
+
+      gst_object_unref (peer);
+    }
+  } else {
+    accum = segment->accum;
+    start = segment->start;
+    stop = segment->stop;
+    time = segment->time;
+  }
+
   event = gst_event_new_new_segment_full (FALSE, segment->rate,
-      segment->applied_rate, segment->format, 0, segment->accum, 0);
+      segment->applied_rate, GST_FORMAT_TIME, 0, accum, 0);
   gst_structure_id_set (event->structure, _subtitle_overlay_event_marker_id,
       G_TYPE_BOOLEAN, TRUE, NULL);
   *event1 = event;
 
   event = gst_event_new_new_segment_full (FALSE, segment->rate,
-      segment->applied_rate, segment->format,
-      segment->start, segment->stop, segment->time);
+      segment->applied_rate, GST_FORMAT_TIME, start, stop, time);
   gst_structure_id_set (event->structure, _subtitle_overlay_event_marker_id,
       G_TYPE_BOOLEAN, TRUE, NULL);
   *event2 = event;
@@ -645,7 +698,8 @@ _setup_passthrough (GstSubtitleOverlay * self)
   if (self->video_segment.format != GST_FORMAT_UNDEFINED) {
     GstEvent *event1, *event2;
 
-    _generate_update_newsegment_event (&self->video_segment, &event1, &event2);
+    _generate_update_newsegment_event (sink, &self->video_segment, &event1,
+        &event2);
     GST_DEBUG_OBJECT (self,
         "Pushing video accumulate newsegment event: %" GST_PTR_FORMAT,
         event1->structure);
@@ -1285,7 +1339,8 @@ _pad_blocked_cb (GstPad * pad, gboolean blocked, gpointer user_data)
       sink = _get_video_pad ((self->renderer) ? self->renderer : self->overlay);
     }
 
-    _generate_update_newsegment_event (&self->video_segment, &event1, &event2);
+    _generate_update_newsegment_event (sink, &self->video_segment, &event1,
+        &event2);
     GST_DEBUG_OBJECT (self,
         "Pushing video accumulate newsegment event: %" GST_PTR_FORMAT,
         event1->structure);
@@ -1306,7 +1361,7 @@ _pad_blocked_cb (GstPad * pad, gboolean blocked, gpointer user_data)
     else
       sink = gst_element_get_static_pad (self->parser, "sink");
 
-    _generate_update_newsegment_event (&self->subtitle_segment, &event1,
+    _generate_update_newsegment_event (sink, &self->subtitle_segment, &event1,
         &event2);
     GST_DEBUG_OBJECT (self,
         "Pushing subtitle accumulate newsegment event: %" GST_PTR_FORMAT,
@@ -2023,6 +2078,8 @@ gst_subtitle_overlay_subtitle_sink_event (GstPad * pad, GstEvent * event)
   gboolean ret;
   GstFormat format;
 
+  GST_DEBUG_OBJECT (pad, "Got event %" GST_PTR_FORMAT, event);
+
   if (GST_EVENT_TYPE (event) == GST_EVENT_CUSTOM_DOWNSTREAM_OOB &&
       event->structure
       && strcmp (gst_structure_get_name (event->structure),
@@ -2096,15 +2153,43 @@ gst_subtitle_overlay_subtitle_sink_event (GstPad * pad, GstEvent * event)
 
     GST_DEBUG_OBJECT (pad, "Old subtitle segment: %" GST_SEGMENT_FORMAT,
         &self->subtitle_segment);
-    if (self->subtitle_segment.format != format) {
-      GST_DEBUG_OBJECT (pad, "Subtitle segment format changed: %s -> %s",
-          gst_format_get_name (self->subtitle_segment.format),
-          gst_format_get_name (format));
-      gst_segment_init (&self->subtitle_segment, format);
+    if (self->subtitle_segment.format != GST_FORMAT_TIME) {
+      gst_segment_init (&self->subtitle_segment, GST_FORMAT_TIME);
+    }
+
+    if (format != GST_FORMAT_TIME) {
+      GstPad *peer;
+      gboolean res = FALSE;
+      gint64 tstart = 0;
+      gint64 tstop = GST_CLOCK_TIME_NONE;
+      gint64 tposition = 0;
+
+      GST_DEBUG_OBJECT (pad, "Subtitle newsegment event (%s) not in TIME "
+          "format, converting", gst_format_get_name (format));
+      peer = gst_pad_get_peer (pad);
+
+      if (peer) {
+        res = _pad_query_convert_to_time (peer, format, start, &tstart);
+        res = res && _pad_query_convert_to_time (peer, format, stop, &tstop);
+        res = res && _pad_query_convert_to_time (peer, format, position,
+            &tposition);
+
+        gst_object_unref (peer);
+      }
+
+      if (res) {
+        start = tstart;
+        stop = tstop;
+        position = tposition;
+      } else {
+        start = 0;
+        stop = GST_CLOCK_TIME_NONE;
+        position = 0;
+      }
     }
 
     gst_segment_set_newsegment_full (&self->subtitle_segment, update, rate,
-        applied_rate, format, start, stop, position);
+        applied_rate, GST_FORMAT_TIME, start, stop, position);
     GST_DEBUG_OBJECT (pad, "New subtitle segment: %" GST_SEGMENT_FORMAT,
         &self->subtitle_segment);
   }
