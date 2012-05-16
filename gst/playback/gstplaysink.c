@@ -257,6 +257,9 @@ struct _GstPlaySink
   GstColorBalance *colorbalance_element;
   GList *colorbalance_channels; /* CONTRAST, BRIGHTNESS, HUE, SATURATION */
   gint colorbalance_values[4];
+
+  GstSegment text_segment;
+  gboolean text_flush;
 };
 
 struct _GstPlaySinkClass
@@ -346,6 +349,8 @@ static void notify_mute_cb (GObject * object, GParamSpec * pspec,
     GstPlaySink * playsink);
 
 static void update_av_offset (GstPlaySink * playsink);
+
+static GQuark _playsink_reset_segment_event_marker_id = 0;
 
 void
 gst_play_marshal_BUFFER__BOXED (GClosure * closure,
@@ -612,6 +617,9 @@ gst_play_sink_class_init (GstPlaySinkClass * klass)
 
   klass->reconfigure = GST_DEBUG_FUNCPTR (gst_play_sink_reconfigure);
   klass->convert_frame = GST_DEBUG_FUNCPTR (gst_play_sink_convert_frame);
+
+  _playsink_reset_segment_event_marker_id =
+      g_quark_from_static_string ("gst-playsink-reset-segment-event-marker");
 }
 
 static void
@@ -1878,6 +1886,172 @@ setup_video_chain (GstPlaySink * playsink, gboolean raw, gboolean async)
   return TRUE;
 }
 
+static void
+_generate_update_newsegment_event (GstPad * pad, GstSegment * segment,
+    GstEvent ** event1, GstEvent ** event2)
+{
+  GstEvent *event;
+
+  *event1 = NULL;
+  *event2 = NULL;
+
+  event = gst_event_new_new_segment_full (FALSE, segment->rate,
+      segment->applied_rate, segment->format, 0, segment->accum, 0);
+  gst_structure_id_set (event->structure,
+      _playsink_reset_segment_event_marker_id, G_TYPE_BOOLEAN, TRUE, NULL);
+  *event1 = event;
+
+  event = gst_event_new_new_segment_full (FALSE, segment->rate,
+      segment->applied_rate, segment->format,
+      segment->start, segment->stop, segment->time);
+  gst_structure_id_set (event->structure,
+      _playsink_reset_segment_event_marker_id, G_TYPE_BOOLEAN, TRUE, NULL);
+  *event2 = event;
+}
+
+static gboolean
+gst_play_sink_text_sink_event (GstPad * pad, GstEvent * event)
+{
+  GstBin *tbin = GST_BIN_CAST (gst_pad_get_parent (pad));
+  GstPlaySink *playsink = GST_PLAY_SINK_CAST (gst_pad_get_parent (tbin));
+  gboolean ret;
+
+  if (GST_EVENT_TYPE (event) == GST_EVENT_CUSTOM_DOWNSTREAM_OOB &&
+      event->structure
+      && strcmp (gst_structure_get_name (event->structure),
+          "subtitleoverlay-flush-subtitle") == 0) {
+    GST_DEBUG_OBJECT (pad,
+        "Custom subtitle flush event received, marking to flush text");
+    GST_PLAY_SINK_LOCK (playsink);
+    playsink->text_flush = TRUE;
+    GST_PLAY_SINK_UNLOCK (playsink);
+  } else if (GST_EVENT_TYPE (event) == GST_EVENT_FLUSH_STOP) {
+    GST_DEBUG_OBJECT (pad,
+        "Resetting text segment because of flush-stop event");
+    gst_segment_init (&playsink->text_segment, GST_FORMAT_UNDEFINED);
+  }
+
+  ret = gst_proxy_pad_event_default (pad, gst_event_ref (event));
+
+  if (GST_EVENT_TYPE (event) == GST_EVENT_NEWSEGMENT) {
+    gboolean update;
+    gdouble rate, applied_rate;
+    GstFormat format;
+    gint64 start, stop, position;
+
+    GST_DEBUG_OBJECT (pad, "Newsegment event: %" GST_PTR_FORMAT,
+        event->structure);
+    gst_event_parse_new_segment_full (event, &update, &rate, &applied_rate,
+        &format, &start, &stop, &position);
+
+    if (playsink->text_segment.format != format) {
+      GST_DEBUG_OBJECT (pad, "Text segment format changed: %s -> %s",
+          gst_format_get_name (playsink->text_segment.format),
+          gst_format_get_name (format));
+      gst_segment_init (&playsink->text_segment, format);
+    }
+
+    GST_DEBUG_OBJECT (pad, "Old text segment: %" GST_SEGMENT_FORMAT,
+        &playsink->text_segment);
+    gst_segment_set_newsegment_full (&playsink->text_segment, update, rate,
+        applied_rate, format, start, stop, position);
+    GST_DEBUG_OBJECT (pad, "New text segment: %" GST_SEGMENT_FORMAT,
+        &playsink->text_segment);
+  }
+
+  gst_event_unref (event);
+  gst_object_unref (playsink);
+  gst_object_unref (tbin);
+  return ret;
+}
+
+static GstFlowReturn
+gst_play_sink_text_sink_chain (GstPad * pad, GstBuffer * buffer)
+{
+  GstBin *tbin = GST_BIN_CAST (gst_pad_get_parent (pad));
+  GstPlaySink *playsink = GST_PLAY_SINK_CAST (gst_pad_get_parent (tbin));
+
+  GstFlowReturn ret = gst_proxy_pad_chain_default (pad, buffer);
+
+  if (ret == GST_FLOW_WRONG_STATE && playsink->text_flush) {
+    GstEvent *event;
+    GstSegment *text_segment;
+
+    GST_DEBUG_OBJECT (pad,
+        "Ignoring wrong state due to flush text being marked");
+    GST_PLAY_SINK_LOCK (playsink);
+    playsink->text_flush = FALSE;
+    text_segment = gst_segment_copy (&playsink->text_segment);
+    GST_PLAY_SINK_UNLOCK (playsink);
+
+    /* make queue drop all cached data.
+     * This event will be dropped on the src pad. */
+    event = gst_event_new_flush_stop ();
+    if (!event->structure) {
+      event->structure =
+          gst_structure_id_empty_new (_playsink_reset_segment_event_marker_id);
+      gst_structure_set_parent_refcount (event->structure,
+          &event->mini_object.refcount);
+    }
+    gst_structure_id_set (event->structure,
+        _playsink_reset_segment_event_marker_id, G_TYPE_BOOLEAN, TRUE, NULL);
+    GST_DEBUG_OBJECT (playsink,
+        "Pushing flush-stop event with reset segment marker set: %"
+        GST_PTR_FORMAT, event->structure);
+    gst_pad_send_event (pad, event);
+
+    /* Re-sync queue segment info after flush-stop.
+     * This event will be dropped on the src pad. */
+    if (text_segment->format != GST_FORMAT_UNDEFINED) {
+      GstEvent *event1, *event2;
+
+      _generate_update_newsegment_event (pad, text_segment, &event1, &event2);
+      GST_DEBUG_OBJECT (playsink,
+          "Pushing text accumulate newsegment event with reset "
+          "segment marker set: %" GST_PTR_FORMAT, event1->structure);
+      GST_DEBUG_OBJECT (playsink,
+          "Pushing text update newsegment event with reset "
+          "segment marker set: %" GST_PTR_FORMAT, event2->structure);
+      gst_pad_send_event (pad, event1);
+      gst_pad_send_event (pad, event2);
+    }
+
+    gst_segment_free (text_segment);
+
+    ret = GST_FLOW_OK;
+  }
+
+  gst_object_unref (playsink);
+  gst_object_unref (tbin);
+  return ret;
+}
+
+static gboolean
+gst_play_sink_text_src_event (GstPad * pad, GstEvent * event)
+{
+  gboolean ret;
+
+  GST_DEBUG_OBJECT (pad, "Got event %" GST_PTR_FORMAT, event);
+
+  if (event->structure &&
+      gst_structure_id_has_field (event->structure,
+          _playsink_reset_segment_event_marker_id)) {
+    /* the events marked with a reset segment marker
+     * are sent internally to reset the queue and
+     * must be dropped here */
+    GST_DEBUG_OBJECT (pad, "Dropping event with reset "
+        "segment marker set: %" GST_PTR_FORMAT, event);
+    ret = TRUE;
+    goto out;
+  }
+
+  ret = gst_proxy_pad_event_default (pad, gst_event_ref (event));
+
+out:
+  gst_event_unref (event);
+  return ret;
+}
+
 /* make an element for playback of video with subtitles embedded.
  * Only used for *raw* video streams.
  *
@@ -2071,11 +2245,21 @@ gen_text_chain (GstPlaySink * playsink)
   if (textsinkpad) {
     chain->textsinkpad = gst_ghost_pad_new ("text_sink", textsinkpad);
     gst_object_unref (textsinkpad);
+
+    gst_pad_set_event_function (chain->textsinkpad,
+        GST_DEBUG_FUNCPTR (gst_play_sink_text_sink_event));
+    gst_pad_set_chain_function (chain->textsinkpad,
+        GST_DEBUG_FUNCPTR (gst_play_sink_text_sink_chain));
+
     gst_element_add_pad (chain->chain.bin, chain->textsinkpad);
   }
   if (srcpad) {
     chain->srcpad = gst_ghost_pad_new ("src", srcpad);
     gst_object_unref (srcpad);
+
+    gst_pad_set_event_function (chain->srcpad,
+        GST_DEBUG_FUNCPTR (gst_play_sink_text_src_event));
+
     gst_element_add_pad (chain->chain.bin, chain->srcpad);
   }
 
@@ -3954,6 +4138,8 @@ gst_play_sink_change_state (GstElement * element, GstStateChange transition)
   playsink = GST_PLAY_SINK (element);
   switch (transition) {
     case GST_STATE_CHANGE_READY_TO_PAUSED:
+      gst_segment_init (&playsink->text_segment, GST_FORMAT_UNDEFINED);
+
       playsink->need_async_start = TRUE;
       /* we want to go async to PAUSED until we managed to configure and add the
        * sinks */
