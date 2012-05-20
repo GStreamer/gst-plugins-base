@@ -259,7 +259,9 @@ struct _GstPlaySink
   gint colorbalance_values[4];
 
   GstSegment text_segment;
-  gboolean text_flush;
+  gboolean custom_flush_finished;
+  gboolean ignore_wrong_state;
+  gboolean pending_flush_stop;
 };
 
 struct _GstPlaySinkClass
@@ -1923,7 +1925,17 @@ gst_play_sink_text_sink_event (GstPad * pad, GstEvent * event)
     GST_DEBUG_OBJECT (pad,
         "Custom subtitle flush event received, marking to flush text");
     GST_PLAY_SINK_LOCK (playsink);
-    playsink->text_flush = TRUE;
+    playsink->ignore_wrong_state = TRUE;
+    playsink->custom_flush_finished = FALSE;
+    GST_PLAY_SINK_UNLOCK (playsink);
+  } else if (GST_EVENT_TYPE (event) == GST_EVENT_CUSTOM_DOWNSTREAM_OOB &&
+      event->structure
+      && strcmp (gst_structure_get_name (event->structure),
+          "subtitleoverlay-flush-subtitle-finish") == 0) {
+    GST_DEBUG_OBJECT (pad, "Custom subtitle flush finish event received");
+    GST_PLAY_SINK_LOCK (playsink);
+    playsink->pending_flush_stop = TRUE;
+    playsink->custom_flush_finished = TRUE;
     GST_PLAY_SINK_UNLOCK (playsink);
   } else if (GST_EVENT_TYPE (event) == GST_EVENT_FLUSH_STOP) {
     GST_DEBUG_OBJECT (pad,
@@ -1970,19 +1982,16 @@ gst_play_sink_text_sink_chain (GstPad * pad, GstBuffer * buffer)
 {
   GstBin *tbin = GST_BIN_CAST (gst_pad_get_parent (pad));
   GstPlaySink *playsink = GST_PLAY_SINK_CAST (gst_pad_get_parent (tbin));
+  GstFlowReturn ret;
 
-  GstFlowReturn ret = gst_proxy_pad_chain_default (pad, buffer);
+  GST_PLAY_SINK_LOCK (playsink);
 
-  if (ret == GST_FLOW_WRONG_STATE && playsink->text_flush) {
-    GstEvent *event;
+  if (playsink->pending_flush_stop) {
     GstSegment *text_segment;
+    GstEvent *event;
 
-    GST_DEBUG_OBJECT (pad,
-        "Ignoring wrong state due to flush text being marked");
-    GST_PLAY_SINK_LOCK (playsink);
-    playsink->text_flush = FALSE;
+    // it will be replaced in flush_stop
     text_segment = gst_segment_copy (&playsink->text_segment);
-    GST_PLAY_SINK_UNLOCK (playsink);
 
     /* make queue drop all cached data.
      * This event will be dropped on the src pad. */
@@ -1995,9 +2004,10 @@ gst_play_sink_text_sink_chain (GstPad * pad, GstBuffer * buffer)
     }
     gst_structure_id_set (event->structure,
         _playsink_reset_segment_event_marker_id, G_TYPE_BOOLEAN, TRUE, NULL);
-    GST_DEBUG_OBJECT (playsink,
+
+    GST_DEBUG_OBJECT (pad,
         "Pushing flush-stop event with reset segment marker set: %"
-        GST_PTR_FORMAT, event->structure);
+        GST_PTR_FORMAT, event);
     gst_pad_send_event (pad, event);
 
     /* Re-sync queue segment info after flush-stop.
@@ -2015,11 +2025,26 @@ gst_play_sink_text_sink_chain (GstPad * pad, GstBuffer * buffer)
       gst_pad_send_event (pad, event1);
       gst_pad_send_event (pad, event2);
     }
-
     gst_segment_free (text_segment);
+
+    playsink->pending_flush_stop = FALSE;
+  }
+  GST_PLAY_SINK_UNLOCK (playsink);
+
+  ret = gst_proxy_pad_chain_default (pad, buffer);
+
+  GST_PLAY_SINK_LOCK (playsink);
+  if (ret == GST_FLOW_WRONG_STATE && playsink->ignore_wrong_state) {
+    GST_DEBUG_OBJECT (pad, "Ignoring wrong state during flush");
+    if (playsink->custom_flush_finished) {
+      GST_DEBUG_OBJECT (pad,
+          "custom flush finished, stop ignoring wrong state");
+      playsink->ignore_wrong_state = FALSE;
+    }
 
     ret = GST_FLOW_OK;
   }
+  GST_PLAY_SINK_UNLOCK (playsink);
 
   gst_object_unref (playsink);
   gst_object_unref (tbin);
