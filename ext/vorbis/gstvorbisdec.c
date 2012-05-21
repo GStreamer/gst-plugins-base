@@ -519,7 +519,7 @@ vorbis_handle_data_packet (GstVorbisDec * vd, ogg_packet * packet,
 #endif
   guint sample_count;
   GstBuffer *out = NULL;
-  GstFlowReturn result;
+  GstFlowReturn result, newresult;
   gint size;
 
   if (G_UNLIKELY (!vd->initialized)) {
@@ -590,7 +590,9 @@ vorbis_handle_data_packet (GstVorbisDec * vd, ogg_packet * packet,
 
 done:
   /* whether or not data produced, consume one frame and advance time */
-  result = gst_audio_decoder_finish_frame (GST_AUDIO_DECODER (vd), out, 1);
+  newresult = gst_audio_decoder_finish_frame (GST_AUDIO_DECODER (vd), out, 1);
+  if (G_UNLIKELY (newresult != GST_FLOW_OK))
+    result = newresult;
 
 #ifdef USE_TREMOLO
   vorbis_dsp_read (&vd->vd, sample_count);
