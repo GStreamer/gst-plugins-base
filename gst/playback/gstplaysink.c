@@ -258,10 +258,24 @@ struct _GstPlaySink
   GList *colorbalance_channels; /* CONTRAST, BRIGHTNESS, HUE, SATURATION */
   gint colorbalance_values[4];
 
+  /* sending audio/video flushes break stream changes when the pipeline
+   * is paused and played again in 0.10 */
+#if 0
+  GstSegment video_segment;
+  gboolean video_custom_flush_finished;
+  gboolean video_ignore_wrong_state;
+  gboolean video_pending_flush;
+
+  GstSegment audio_segment;
+  gboolean audio_custom_flush_finished;
+  gboolean audio_ignore_wrong_state;
+  gboolean audio_pending_flush;
+#endif
+
   GstSegment text_segment;
-  gboolean custom_flush_finished;
-  gboolean ignore_wrong_state;
-  gboolean pending_flush_stop;
+  gboolean text_custom_flush_finished;
+  gboolean text_ignore_wrong_state;
+  gboolean text_pending_flush;
 };
 
 struct _GstPlaySinkClass
@@ -344,6 +358,20 @@ static GstStateChangeReturn gst_play_sink_change_state (GstElement * element,
     GstStateChange transition);
 
 static void gst_play_sink_handle_message (GstBin * bin, GstMessage * message);
+
+/* sending audio/video flushes break stream changes when the pipeline
+ * is paused and played again in 0.10 */
+#if 0
+static gboolean gst_play_sink_video_sink_event (GstPad * pad, GstEvent * event);
+static GstFlowReturn gst_play_sink_video_sink_chain (GstPad * pad,
+    GstBuffer * buffer);
+static gboolean gst_play_sink_audio_sink_event (GstPad * pad, GstEvent * event);
+static GstFlowReturn gst_play_sink_audio_sink_chain (GstPad * pad,
+    GstBuffer * buffer);
+#endif
+static gboolean gst_play_sink_text_sink_event (GstPad * pad, GstEvent * event);
+static GstFlowReturn gst_play_sink_text_sink_chain (GstPad * pad,
+    GstBuffer * buffer);
 
 static void notify_volume_cb (GObject * object, GParamSpec * pspec,
     GstPlaySink * playsink);
@@ -1734,8 +1762,17 @@ gen_video_chain (GstPlaySink * playsink, gboolean raw, gboolean async)
 
   pad = gst_element_get_static_pad (head, "sink");
   chain->sinkpad = gst_ghost_pad_new ("sink", pad);
-  gst_object_unref (pad);
 
+  /* sending audio/video flushes break stream changes when the pipeline
+   * is paused and played again in 0.10 */
+#if 0
+  gst_pad_set_event_function (chain->sinkpad,
+      GST_DEBUG_FUNCPTR (gst_play_sink_video_sink_event));
+  gst_pad_set_chain_function (chain->sinkpad,
+      GST_DEBUG_FUNCPTR (gst_play_sink_video_sink_chain));
+#endif
+
+  gst_object_unref (pad);
   gst_element_add_pad (chain->chain.bin, chain->sinkpad);
 
   return chain;
@@ -1889,8 +1926,8 @@ setup_video_chain (GstPlaySink * playsink, gboolean raw, gboolean async)
 }
 
 static void
-_generate_update_newsegment_event (GstPad * pad, GstSegment * segment,
-    GstEvent ** event1, GstEvent ** event2)
+gst_play_sink_generate_update_newsegment_event (GstPad * pad,
+    GstSegment * segment, GstEvent ** event1, GstEvent ** event2)
 {
   GstEvent *event;
 
@@ -1898,7 +1935,7 @@ _generate_update_newsegment_event (GstPad * pad, GstSegment * segment,
   *event2 = NULL;
 
   event = gst_event_new_new_segment_full (FALSE, segment->rate,
-      segment->applied_rate, segment->format, 0, segment->accum, 0);
+      segment->applied_rate, segment->format, 0, GST_CLOCK_TIME_NONE, 0);
   gst_structure_id_set (event->structure,
       _playsink_reset_segment_event_marker_id, G_TYPE_BOOLEAN, TRUE, NULL);
   *event1 = event;
@@ -1912,37 +1949,53 @@ _generate_update_newsegment_event (GstPad * pad, GstSegment * segment,
 }
 
 static gboolean
-gst_play_sink_text_sink_event (GstPad * pad, GstEvent * event)
+gst_play_sink_sink_event (GstPad * pad, GstEvent * event,
+    const gchar * sink_type,
+    gboolean * sink_ignore_wrong_state,
+    gboolean * sink_custom_flush_finished,
+    gboolean * sink_pending_flush, GstSegment * sink_segment)
 {
   GstBin *tbin = GST_BIN_CAST (gst_pad_get_parent (pad));
   GstPlaySink *playsink = GST_PLAY_SINK_CAST (gst_pad_get_parent (tbin));
   gboolean ret;
 
   if (GST_EVENT_TYPE (event) == GST_EVENT_CUSTOM_DOWNSTREAM_OOB &&
-      event->structure
-      && strcmp (gst_structure_get_name (event->structure),
-          "subtitleoverlay-flush-subtitle") == 0) {
-    GST_DEBUG_OBJECT (pad,
-        "Custom subtitle flush event received, marking to flush text");
-    GST_PLAY_SINK_LOCK (playsink);
-    playsink->ignore_wrong_state = TRUE;
-    playsink->custom_flush_finished = FALSE;
-    GST_PLAY_SINK_UNLOCK (playsink);
-  } else if (GST_EVENT_TYPE (event) == GST_EVENT_CUSTOM_DOWNSTREAM_OOB &&
-      event->structure
-      && strcmp (gst_structure_get_name (event->structure),
-          "subtitleoverlay-flush-subtitle-finish") == 0) {
-    GST_DEBUG_OBJECT (pad, "Custom subtitle flush finish event received");
-    GST_PLAY_SINK_LOCK (playsink);
-    playsink->pending_flush_stop = TRUE;
-    playsink->custom_flush_finished = TRUE;
-    GST_PLAY_SINK_UNLOCK (playsink);
+      event->structure) {
+    gchar *custom_flush;
+    gchar *custom_flush_finish;
+
+    custom_flush = g_strdup_printf ("playsink-custom-%s-flush", sink_type);
+    custom_flush_finish =
+        g_strdup_printf ("playsink-custom-%s-flush-finish", sink_type);
+    if (strcmp (gst_structure_get_name (event->structure), custom_flush) == 0) {
+      GST_DEBUG_OBJECT (pad,
+          "Custom %s flush event received, marking to flush %s", sink_type,
+          sink_type);
+      GST_PLAY_SINK_LOCK (playsink);
+      *sink_ignore_wrong_state = TRUE;
+      *sink_custom_flush_finished = FALSE;
+      GST_PLAY_SINK_UNLOCK (playsink);
+    } else if (strcmp (gst_structure_get_name (event->structure),
+            custom_flush_finish) == 0) {
+      GST_DEBUG_OBJECT (pad, "Custom %s flush finish event received",
+          sink_type);
+      GST_PLAY_SINK_LOCK (playsink);
+      *sink_pending_flush = TRUE;
+      *sink_custom_flush_finished = TRUE;
+      GST_PLAY_SINK_UNLOCK (playsink);
+    }
+
+    g_free (custom_flush);
+    g_free (custom_flush_finish);
   } else if (GST_EVENT_TYPE (event) == GST_EVENT_FLUSH_STOP) {
-    GST_DEBUG_OBJECT (pad,
-        "Resetting text segment because of flush-stop event");
-    gst_segment_init (&playsink->text_segment, GST_FORMAT_UNDEFINED);
+    GST_PLAY_SINK_LOCK (playsink);
+    GST_DEBUG_OBJECT (pad, "Resetting %s segment because of flush-stop event",
+        sink_type);
+    gst_segment_init (sink_segment, GST_FORMAT_UNDEFINED);
+    GST_PLAY_SINK_UNLOCK (playsink);
   }
 
+  GST_DEBUG_OBJECT (pad, "Forwarding event %" GST_PTR_FORMAT, event);
   ret = gst_proxy_pad_event_default (pad, gst_event_ref (event));
 
   if (GST_EVENT_TYPE (event) == GST_EVENT_NEWSEGMENT) {
@@ -1956,19 +2009,22 @@ gst_play_sink_text_sink_event (GstPad * pad, GstEvent * event)
     gst_event_parse_new_segment_full (event, &update, &rate, &applied_rate,
         &format, &start, &stop, &position);
 
-    if (playsink->text_segment.format != format) {
-      GST_DEBUG_OBJECT (pad, "Text segment format changed: %s -> %s",
-          gst_format_get_name (playsink->text_segment.format),
+    GST_PLAY_SINK_LOCK (playsink);
+    if (sink_segment->format != format) {
+      GST_DEBUG_OBJECT (pad, "%s segment format changed: %s -> %s",
+          sink_type,
+          gst_format_get_name (sink_segment->format),
           gst_format_get_name (format));
-      gst_segment_init (&playsink->text_segment, format);
+      gst_segment_init (sink_segment, format);
     }
 
-    GST_DEBUG_OBJECT (pad, "Old text segment: %" GST_SEGMENT_FORMAT,
-        &playsink->text_segment);
-    gst_segment_set_newsegment_full (&playsink->text_segment, update, rate,
+    GST_DEBUG_OBJECT (pad, "Old %s segment: %" GST_SEGMENT_FORMAT,
+        sink_type, sink_segment);
+    gst_segment_set_newsegment_full (sink_segment, update, rate,
         applied_rate, format, start, stop, position);
-    GST_DEBUG_OBJECT (pad, "New text segment: %" GST_SEGMENT_FORMAT,
-        &playsink->text_segment);
+    GST_DEBUG_OBJECT (pad, "New %s segment: %" GST_SEGMENT_FORMAT,
+        sink_type, sink_segment);
+    GST_PLAY_SINK_UNLOCK (playsink);
   }
 
   gst_event_unref (event);
@@ -1978,7 +2034,11 @@ gst_play_sink_text_sink_event (GstPad * pad, GstEvent * event)
 }
 
 static GstFlowReturn
-gst_play_sink_text_sink_chain (GstPad * pad, GstBuffer * buffer)
+gst_play_sink_sink_chain (GstPad * pad, GstBuffer * buffer,
+    const gchar * sink_type,
+    gboolean * sink_ignore_wrong_state,
+    gboolean * sink_custom_flush_finished,
+    gboolean * sink_pending_flush, GstSegment * sink_segment)
 {
   GstBin *tbin = GST_BIN_CAST (gst_pad_get_parent (pad));
   GstPlaySink *playsink = GST_PLAY_SINK_CAST (gst_pad_get_parent (tbin));
@@ -1986,15 +2046,34 @@ gst_play_sink_text_sink_chain (GstPad * pad, GstBuffer * buffer)
 
   GST_PLAY_SINK_LOCK (playsink);
 
-  if (playsink->pending_flush_stop) {
-    GstSegment text_segment;
+  if (*sink_pending_flush) {
+    GstSegment segment_copy;
     GstEvent *event;
 
-    /* it will be replaced in flush_stop */
-    text_segment = playsink->text_segment;
+    *sink_pending_flush = FALSE;
 
-    /* make queue drop all cached data.
-     * This event will be dropped on the src pad. */
+    /* sink_segment will be updated in flush */
+    segment_copy = *sink_segment;
+
+    GST_PLAY_SINK_UNLOCK (playsink);
+
+    /* make the bin drop all cached data.
+     * This event will be dropped on the src pad, if any. */
+    event = gst_event_new_flush_start ();
+    if (!event->structure) {
+      event->structure =
+          gst_structure_id_empty_new (_playsink_reset_segment_event_marker_id);
+      gst_structure_set_parent_refcount (event->structure,
+          &event->mini_object.refcount);
+    }
+    gst_structure_id_set (event->structure,
+        _playsink_reset_segment_event_marker_id, G_TYPE_BOOLEAN, TRUE, NULL);
+
+    GST_DEBUG_OBJECT (pad,
+        "Pushing %s flush-start event with reset segment marker set: %"
+        GST_PTR_FORMAT, sink_type, event);
+    gst_pad_send_event (pad, event);
+
     event = gst_event_new_flush_stop ();
     if (!event->structure) {
       event->structure =
@@ -2006,44 +2085,151 @@ gst_play_sink_text_sink_chain (GstPad * pad, GstBuffer * buffer)
         _playsink_reset_segment_event_marker_id, G_TYPE_BOOLEAN, TRUE, NULL);
 
     GST_DEBUG_OBJECT (pad,
-        "Pushing flush-stop event with reset segment marker set: %"
-        GST_PTR_FORMAT, event);
+        "Pushing %s flush-stop event with reset segment marker set: %"
+        GST_PTR_FORMAT, sink_type, event);
     gst_pad_send_event (pad, event);
 
-    /* Re-sync queue segment info after flush-stop.
-     * This event will be dropped on the src pad. */
-    if (text_segment.format != GST_FORMAT_UNDEFINED) {
+    /* Re-sync queue segment info after flush.
+     * This event will be dropped on the src pad, if any. */
+    if (segment_copy.format != GST_FORMAT_UNDEFINED) {
       GstEvent *event1, *event2;
 
-      _generate_update_newsegment_event (pad, &text_segment, &event1, &event2);
+      gst_play_sink_generate_update_newsegment_event (pad, &segment_copy,
+          &event1, &event2);
       GST_DEBUG_OBJECT (playsink,
-          "Pushing text accumulate newsegment event with reset "
-          "segment marker set: %" GST_PTR_FORMAT, event1->structure);
+          "Pushing %s accumulate newsegment event with reset "
+          "segment marker set: %" GST_PTR_FORMAT, sink_type, event1->structure);
       GST_DEBUG_OBJECT (playsink,
-          "Pushing text update newsegment event with reset "
-          "segment marker set: %" GST_PTR_FORMAT, event2->structure);
+          "Pushing %s update newsegment event with reset "
+          "segment marker set: %" GST_PTR_FORMAT, sink_type, event2->structure);
       gst_pad_send_event (pad, event1);
       gst_pad_send_event (pad, event2);
     }
-
-    playsink->pending_flush_stop = FALSE;
+  } else {
+    GST_PLAY_SINK_UNLOCK (playsink);
   }
-  GST_PLAY_SINK_UNLOCK (playsink);
 
   ret = gst_proxy_pad_chain_default (pad, buffer);
 
   GST_PLAY_SINK_LOCK (playsink);
-  if (ret == GST_FLOW_WRONG_STATE && playsink->ignore_wrong_state) {
-    GST_DEBUG_OBJECT (pad, "Ignoring wrong state during flush");
-    if (playsink->custom_flush_finished) {
-      GST_DEBUG_OBJECT (pad,
-          "custom flush finished, stop ignoring wrong state");
-      playsink->ignore_wrong_state = FALSE;
+  if (ret == GST_FLOW_WRONG_STATE && *sink_ignore_wrong_state) {
+    GST_DEBUG_OBJECT (pad, "Ignoring wrong state for %s during flush",
+        sink_type);
+    if (*sink_custom_flush_finished) {
+      GST_DEBUG_OBJECT (pad, "Custom flush finished, stop ignoring "
+          "wrong state for %s", sink_type);
+      *sink_ignore_wrong_state = FALSE;
     }
 
     ret = GST_FLOW_OK;
   }
   GST_PLAY_SINK_UNLOCK (playsink);
+
+  gst_object_unref (playsink);
+  gst_object_unref (tbin);
+  return ret;
+}
+
+/* sending audio/video flushes break stream changes when the pipeline
+ * is paused and played again in 0.10 */
+#if 0
+static gboolean
+gst_play_sink_video_sink_event (GstPad * pad, GstEvent * event)
+{
+  GstBin *tbin = GST_BIN_CAST (gst_pad_get_parent (pad));
+  GstPlaySink *playsink = GST_PLAY_SINK_CAST (gst_pad_get_parent (tbin));
+  gboolean ret;
+
+  ret = gst_play_sink_sink_event (pad, event, "video",
+      &playsink->video_ignore_wrong_state,
+      &playsink->video_custom_flush_finished,
+      &playsink->video_pending_flush, &playsink->video_segment);
+
+  gst_object_unref (playsink);
+  gst_object_unref (tbin);
+  return ret;
+}
+
+static GstFlowReturn
+gst_play_sink_video_sink_chain (GstPad * pad, GstBuffer * buffer)
+{
+  GstBin *tbin = GST_BIN_CAST (gst_pad_get_parent (pad));
+  GstPlaySink *playsink = GST_PLAY_SINK_CAST (gst_pad_get_parent (tbin));
+  gboolean ret;
+
+  ret = gst_play_sink_sink_chain (pad, buffer, "video",
+      &playsink->video_ignore_wrong_state,
+      &playsink->video_custom_flush_finished,
+      &playsink->video_pending_flush, &playsink->video_segment);
+
+  gst_object_unref (playsink);
+  gst_object_unref (tbin);
+  return ret;
+}
+
+static gboolean
+gst_play_sink_audio_sink_event (GstPad * pad, GstEvent * event)
+{
+  GstBin *tbin = GST_BIN_CAST (gst_pad_get_parent (pad));
+  GstPlaySink *playsink = GST_PLAY_SINK_CAST (gst_pad_get_parent (tbin));
+  gboolean ret;
+
+  ret = gst_play_sink_sink_event (pad, event, "audio",
+      &playsink->audio_ignore_wrong_state,
+      &playsink->audio_custom_flush_finished,
+      &playsink->audio_pending_flush, &playsink->audio_segment);
+
+  gst_object_unref (playsink);
+  gst_object_unref (tbin);
+  return ret;
+}
+
+static GstFlowReturn
+gst_play_sink_audio_sink_chain (GstPad * pad, GstBuffer * buffer)
+{
+  GstBin *tbin = GST_BIN_CAST (gst_pad_get_parent (pad));
+  GstPlaySink *playsink = GST_PLAY_SINK_CAST (gst_pad_get_parent (tbin));
+  gboolean ret;
+
+  ret = gst_play_sink_sink_chain (pad, buffer, "audio",
+      &playsink->audio_ignore_wrong_state,
+      &playsink->audio_custom_flush_finished,
+      &playsink->audio_pending_flush, &playsink->audio_segment);
+
+  gst_object_unref (playsink);
+  gst_object_unref (tbin);
+  return ret;
+}
+#endif
+
+static gboolean
+gst_play_sink_text_sink_event (GstPad * pad, GstEvent * event)
+{
+  GstBin *tbin = GST_BIN_CAST (gst_pad_get_parent (pad));
+  GstPlaySink *playsink = GST_PLAY_SINK_CAST (gst_pad_get_parent (tbin));
+  gboolean ret;
+
+  ret = gst_play_sink_sink_event (pad, event, "subtitle",
+      &playsink->text_ignore_wrong_state,
+      &playsink->text_custom_flush_finished,
+      &playsink->text_pending_flush, &playsink->text_segment);
+
+  gst_object_unref (playsink);
+  gst_object_unref (tbin);
+  return ret;
+}
+
+static GstFlowReturn
+gst_play_sink_text_sink_chain (GstPad * pad, GstBuffer * buffer)
+{
+  GstBin *tbin = GST_BIN_CAST (gst_pad_get_parent (pad));
+  GstPlaySink *playsink = GST_PLAY_SINK_CAST (gst_pad_get_parent (tbin));
+  gboolean ret;
+
+  ret = gst_play_sink_sink_chain (pad, buffer, "subtitle",
+      &playsink->text_ignore_wrong_state,
+      &playsink->text_custom_flush_finished,
+      &playsink->text_pending_flush, &playsink->text_segment);
 
   gst_object_unref (playsink);
   gst_object_unref (tbin);
@@ -2504,6 +2690,16 @@ gen_audio_chain (GstPlaySink * playsink, gboolean raw)
   GST_DEBUG_OBJECT (playsink, "ghosting sink pad");
   pad = gst_element_get_static_pad (head, "sink");
   chain->sinkpad = gst_ghost_pad_new ("sink", pad);
+
+  /* sending audio/video flushes break stream changes when the pipeline
+   * is paused and played again in 0.10 */
+#if 0
+  gst_pad_set_event_function (chain->sinkpad,
+      GST_DEBUG_FUNCPTR (gst_play_sink_audio_sink_event));
+  gst_pad_set_chain_function (chain->sinkpad,
+      GST_DEBUG_FUNCPTR (gst_play_sink_audio_sink_chain));
+#endif
+
   gst_object_unref (pad);
   gst_element_add_pad (chain->chain.bin, chain->sinkpad);
 

@@ -2083,7 +2083,7 @@ gst_subtitle_overlay_subtitle_sink_event (GstPad * pad, GstEvent * event)
   if (GST_EVENT_TYPE (event) == GST_EVENT_CUSTOM_DOWNSTREAM_OOB &&
       event->structure
       && strcmp (gst_structure_get_name (event->structure),
-          "subtitleoverlay-flush-subtitle") == 0) {
+          "playsink-custom-subtitle-flush") == 0) {
     GST_DEBUG_OBJECT (pad, "Custom subtitle flush event");
     GST_SUBTITLE_OVERLAY_LOCK (self);
     self->subtitle_flush = TRUE;
