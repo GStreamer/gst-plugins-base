@@ -3766,7 +3766,7 @@ gst_play_sink_refresh_pad (GstPlaySink * playsink, GstPad * pad,
 wrong_type:
   {
     GST_WARNING_OBJECT (playsink, "wrong type %d for pad %" GST_PTR_FORMAT,
-        pad);
+        type, pad);
     GST_PLAY_SINK_UNLOCK (playsink);
     return;
   }
