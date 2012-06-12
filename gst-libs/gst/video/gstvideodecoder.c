@@ -1791,7 +1791,7 @@ gst_video_decoder_new_frame (GstVideoDecoder * decoder)
 
 static void
 gst_video_decoder_prepare_finish_frame (GstVideoDecoder *
-    decoder, GstVideoCodecFrame * frame)
+    decoder, GstVideoCodecFrame * frame, gboolean dropping)
 {
   GstVideoDecoderPrivate *priv = decoder->priv;
   GList *l, *events = NULL;
@@ -1842,7 +1842,8 @@ gst_video_decoder_prepare_finish_frame (GstVideoDecoder *
 
   /* Check if the data should not be displayed. For example altref/invisible
    * frame in vp8. In this case we should not update the timestamps. */
-  if (GST_VIDEO_CODEC_FRAME_IS_DECODE_ONLY (frame) || !frame->output_buffer)
+  if (GST_VIDEO_CODEC_FRAME_IS_DECODE_ONLY (frame) || (!frame->output_buffer
+          && !dropping))
     return;
 
   if (GST_CLOCK_TIME_IS_VALID (frame->pts)) {
@@ -1852,7 +1853,7 @@ gst_video_decoder_prepare_finish_frame (GstVideoDecoder *
           GST_TIME_ARGS (frame->pts),
           GST_TIME_ARGS (frame->pts - decoder->output_segment.start));
       priv->timestamp_offset = frame->pts;
-    } else {
+    } else if (GST_CLOCK_TIME_IS_VALID (priv->last_timestamp_out)) {
       /* This case is for one initial timestamp and no others, e.g.,
        * filesrc ! decoder ! xvimagesink */
       GST_WARNING_OBJECT (decoder, "sync timestamp didn't change, ignoring");
@@ -1944,7 +1945,7 @@ gst_video_decoder_drop_frame (GstVideoDecoder * dec, GstVideoCodecFrame * frame)
 
   GST_VIDEO_DECODER_STREAM_LOCK (dec);
 
-  gst_video_decoder_prepare_finish_frame (dec, frame);
+  gst_video_decoder_prepare_finish_frame (dec, frame, TRUE);
 
   GST_DEBUG_OBJECT (dec, "dropping frame %" GST_TIME_FORMAT,
       GST_TIME_ARGS (frame->pts));
@@ -2008,7 +2009,7 @@ gst_video_decoder_finish_frame (GstVideoDecoder * decoder,
 
   GST_VIDEO_DECODER_STREAM_LOCK (decoder);
 
-  gst_video_decoder_prepare_finish_frame (decoder, frame);
+  gst_video_decoder_prepare_finish_frame (decoder, frame, FALSE);
   priv->processed++;
   /* no buffer data means this frame is skipped */
   if (!frame->output_buffer || GST_VIDEO_CODEC_FRAME_IS_DECODE_ONLY (frame)) {
