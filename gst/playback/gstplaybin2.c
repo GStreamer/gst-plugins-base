@@ -394,6 +394,7 @@ struct _GstPlayBin
 
   guint64 buffer_duration;      /* When buffering, the max buffer duration (ns) */
   guint buffer_size;            /* When buffering, the max buffer size (bytes) */
+  gboolean force_aspect_ratio;
 
   /* our play sink */
   GstPlaySink *playsink;
@@ -523,6 +524,7 @@ enum
   PROP_BUFFER_DURATION,
   PROP_AV_OFFSET,
   PROP_RING_BUFFER_MAX_SIZE,
+  PROP_FORCE_ASPECT_RATIO,
   PROP_LAST
 };
 
@@ -874,6 +876,18 @@ gst_play_bin_class_init (GstPlayBinClass * klass)
           "Max. ring buffer size (bytes)",
           "Max. amount of data in the ring buffer (bytes, 0 = ring buffer disabled)",
           0, G_MAXUINT, DEFAULT_RING_BUFFER_MAX_SIZE,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  /**
+   * GstPlaySink::force-aspect-ratio:
+   *
+   * Requests the video sink to enforce the video display aspect ratio.
+   *
+   * Since: 0.10.37
+   */
+  g_object_class_install_property (gobject_klass, PROP_FORCE_ASPECT_RATIO,
+      g_param_spec_boolean ("force-aspect-ratio", "Force Aspect Ratio",
+          "When enabled, scaling will respect original aspect ratio", TRUE,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   /**
@@ -1386,6 +1400,8 @@ gst_play_bin_init (GstPlayBin * playbin)
   playbin->buffer_duration = DEFAULT_BUFFER_DURATION;
   playbin->buffer_size = DEFAULT_BUFFER_SIZE;
   playbin->ring_buffer_max_size = DEFAULT_RING_BUFFER_MAX_SIZE;
+
+  playbin->force_aspect_ratio = TRUE;
 }
 
 static void
@@ -2122,6 +2138,10 @@ gst_play_bin_set_property (GObject * object, guint prop_id,
     case PROP_RING_BUFFER_MAX_SIZE:
       playbin->ring_buffer_max_size = g_value_get_uint64 (value);
       break;
+    case PROP_FORCE_ASPECT_RATIO:
+      g_object_set (playbin->playsink, "force-aspect-ratio",
+          g_value_get_boolean (value), NULL);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -2297,6 +2317,13 @@ gst_play_bin_get_property (GObject * object, guint prop_id, GValue * value,
     case PROP_RING_BUFFER_MAX_SIZE:
       g_value_set_uint64 (value, playbin->ring_buffer_max_size);
       break;
+    case PROP_FORCE_ASPECT_RATIO:{
+      gboolean v;
+
+      g_object_get (playbin->playsink, "force-aspect-ratio", &v, NULL);
+      g_value_set_boolean (value, v);
+      break;
+    }
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
