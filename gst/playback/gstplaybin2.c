@@ -864,7 +864,7 @@ gst_play_bin_class_init (GstPlayBinClass * klass)
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   /**
-   * GstQueue2:ring-buffer-max-size
+   * GstPlayBin2::ring-buffer-max-size
    *
    * The maximum size of the ring buffer in bytes. If set to 0, the ring
    * buffer is disabled. Default 0.
@@ -879,7 +879,7 @@ gst_play_bin_class_init (GstPlayBinClass * klass)
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   /**
-   * GstPlaySink::force-aspect-ratio:
+   * GstPlayBin2::force-aspect-ratio:
    *
    * Requests the video sink to enforce the video display aspect ratio.
    *
