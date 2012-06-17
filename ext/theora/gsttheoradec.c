@@ -208,6 +208,7 @@ gst_theora_dec_init (GstTheoraDec * dec, GstTheoraDecClass * g_class)
 
   /* input is packetized,
    * but is not marked that way so data gets parsed and keyframes marked */
+  gst_video_decoder_set_packetized (GST_VIDEO_DECODER (dec), FALSE);
 }
 
 static void
@@ -275,8 +276,10 @@ theora_dec_parse (GstVideoDecoder * decoder,
 
   data = gst_adapter_peek (adapter, 1);
   /* check for keyframe; must not be header packet */
-  if (!(data[0] & 0x80) && (data[0] & 0x40) == 0)
+  if (!(data[0] & 0x80) && (data[0] & 0x40) == 0) {
+    GST_DEBUG_OBJECT (decoder, "Found keyframe, frame %p", frame);
     GST_VIDEO_CODEC_FRAME_SET_SYNC_POINT (frame);
+  }
 
   /* and pass along all */
   gst_video_decoder_add_to_frame (decoder, av);
@@ -656,8 +659,6 @@ theora_handle_data_packet (GstTheoraDec * dec, ogg_packet * packet,
     goto wrong_dimensions;
 
   result = theora_handle_image (dec, buf, frame);
-  if (result != GST_FLOW_OK)
-    return result;
 
   return result;
 
