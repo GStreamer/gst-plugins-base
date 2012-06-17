@@ -1546,7 +1546,7 @@ gst_video_decoder_reset (GstVideoDecoder * decoder, gboolean full)
   priv->base_timestamp = GST_CLOCK_TIME_NONE;
   priv->last_timestamp_in = GST_CLOCK_TIME_NONE;
   priv->last_timestamp_out = GST_CLOCK_TIME_NONE;
-  priv->last_out_frame_number = 0;
+  priv->last_out_frame_number = (guint) (-1);
   priv->reordered_output = FALSE;
   priv->reordered_input = FALSE;
 
@@ -1989,6 +1989,7 @@ gst_video_decoder_prepare_finish_frame (GstVideoDecoder *
       (priv->reorder_idx_out + 1) % MAX_DTS_PTS_REORDER_DEPTH;
 
   if (!priv->reordered_output && frame->system_frame_number &&
+      priv->last_out_frame_number != (guint) (-1) &&
       frame->system_frame_number != (priv->last_out_frame_number + 1)) {
     GST_DEBUG_OBJECT (decoder, "Detected reordered output");
     priv->reordered_output = TRUE;
