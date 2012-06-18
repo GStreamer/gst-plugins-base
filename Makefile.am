@@ -56,6 +56,7 @@ endif
 
 WIN32_COPY = \
 	$(top_builddir)/gst-libs/gst/*/*-enumtypes.[ch] \
+	$(top_builddir)/gst-libs/gst/pbutils/gstpluginsbaseversion.h \
 	$(top_builddir)/_stdint.h
 
 win32-update:
