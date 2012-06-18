@@ -39,7 +39,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="../../../gstreamer,../../gst-libs,../common"
+				AdditionalIncludeDirectories="../../../gstreamer;&quot;../../gst-libs&quot;../common;..\..\..\gstreamer\libs"
 				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;_USRDLL;LIBGSTTAG_EXPORTS;HAVE_CONFIG_H"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
@@ -60,7 +60,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="libgstreamer-0.10.lib glib-2.0.lib gobject-2.0.lib"
+				AdditionalDependencies="libgstreamer-0.10.lib libgstbase-0.10.lib glib-2.0.lib gobject-2.0.lib"
 				OutputFile="$(OutDir)/libgsttag-0.10.dll"
 				LinkIncremental="2"
 				AdditionalLibraryDirectories="../../../gstreamer/win32/vs8/$(ConfigurationName)"
@@ -188,7 +188,23 @@
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
 			>
 			<File
+				RelativePath="..\..\gst-libs\gst\tag\gstexiftag.c"
+				>
+			</File>
+			<File
 				RelativePath="..\..\gst-libs\gst\tag\gstid3tag.c"
+				>
+			</File>
+			<File
+				RelativePath="..\..\gst-libs\gst\tag\gsttagdemux.c"
+				>
+			</File>
+			<File
+				RelativePath="..\..\gst-libs\gst\tag\gsttageditingprivate.c"
+				>
+			</File>
+			<File
+				RelativePath="..\..\gst-libs\gst\tag\gsttagmux.c"
 				>
 			</File>
 			<File
@@ -196,7 +212,31 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\gst-libs\gst\tag\gstxmptag.c"
+				>
+			</File>
+			<File
+				RelativePath="..\..\gst-libs\gst\tag\id3v2.c"
+				>
+			</File>
+			<File
+				RelativePath="..\..\gst-libs\gst\tag\id3v2frames.c"
+				>
+			</File>
+			<File
+				RelativePath="..\..\gst-libs\gst\tag\lang.c"
+				>
+			</File>
+			<File
+				RelativePath="..\..\gst-libs\gst\tag\licenses.c"
+				>
+			</File>
+			<File
 				RelativePath="..\..\gst-libs\gst\tag\tags.c"
+				>
+			</File>
+			<File
+				RelativePath="..\..\gst-libs\gst\tag\xmpwriter.c"
 				>
 			</File>
 		</Filter>

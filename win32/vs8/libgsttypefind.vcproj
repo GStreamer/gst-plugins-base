@@ -39,7 +39,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="../../../gstreamer;../common"
+				AdditionalIncludeDirectories="../../../gstreamer;../common;&quot;..\..\gst-libs&quot;..\..\..\gstreamer\libs"
 				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;_USRDLL;LIBGSTTYPEFIND_EXPORTS;HAVE_CONFIG_H"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
@@ -60,7 +60,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="libgstreamer-0.10.lib glib-2.0.lib gobject-2.0.lib"
+				AdditionalDependencies="libgstreamer-0.10.lib libgstbase-0.10.lib glib-2.0.lib gobject-2.0.lib"
 				OutputFile="$(OutDir)/libgsttypefind.dll"
 				LinkIncremental="2"
 				AdditionalLibraryDirectories="../../../gstreamer/win32/vs8/$(ConfigurationName)"

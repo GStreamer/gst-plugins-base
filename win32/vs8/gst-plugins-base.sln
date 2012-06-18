@@ -4,9 +4,14 @@ Microsoft Visual Studio Solution File, Format Version 9.00
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libgstriff", "libgstriff.vcproj", "{3D36330F-1F68-44F6-A712-803E819A3DCD}"
 	ProjectSection(ProjectDependencies) = postProject
 		{BD17F145-422C-4EC0-A756-C7675A5626B2} = {BD17F145-422C-4EC0-A756-C7675A5626B2}
+		{626AF6BD-0AAB-4019-929A-2DB5CAD0419E} = {626AF6BD-0AAB-4019-929A-2DB5CAD0419E}
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libgstaudio", "libgstaudio.vcproj", "{BD17F145-422C-4EC0-A756-C7675A5626B2}"
+	ProjectSection(ProjectDependencies) = postProject
+		{CF1687EC-9097-4A86-B7FB-C1ECF9E27EA4} = {CF1687EC-9097-4A86-B7FB-C1ECF9E27EA4}
+		{F0B70168-8AE3-4B71-B14E-E9BE419FA133} = {F0B70168-8AE3-4B71-B14E-E9BE419FA133}
+	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libgstadder", "libgstadder.vcproj", "{E54E1872-C90A-4FF8-A4F4-27C3F8750D44}"
 EndProject
@@ -32,6 +37,9 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libgstplaybin", "libgstplay
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libgsttypefind", "libgsttypefind.vcproj", "{F7558C2A-C1BC-453C-8FDE-84F33DB73915}"
+	ProjectSection(ProjectDependencies) = postProject
+		{F0B70168-8AE3-4B71-B14E-E9BE419FA133} = {F0B70168-8AE3-4B71-B14E-E9BE419FA133}
+	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libgstvideorate", "libgstvideorate.vcproj", "{84F3B76C-4733-4032-B51E-F8E71022AFE6}"
 EndProject
@@ -48,6 +56,9 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libgstvolume", "libgstvolum
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libgstdecodebin", "libgstdecodebin.vcproj", "{0969BEF1-77F5-468F-9497-8470FDEC615A}"
+	ProjectSection(ProjectDependencies) = postProject
+		{F0B70168-8AE3-4B71-B14E-E9BE419FA133} = {F0B70168-8AE3-4B71-B14E-E9BE419FA133}
+	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libgstinterfaces", "libgstinterfaces.vcproj", "{CF1687EC-9097-4A86-B7FB-C1ECF9E27EA4}"
 EndProject
@@ -73,8 +84,13 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libgsttheora", "libgsttheor
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libgsttag", "libgsttag.vcproj", "{626AF6BD-0AAB-4019-929A-2DB5CAD0419E}"
+	ProjectSection(ProjectDependencies) = postProject
+		{F7558C2A-C1BC-453C-8FDE-84F33DB73915} = {F7558C2A-C1BC-453C-8FDE-84F33DB73915}
+	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libgstvideo", "libgstvideo.vcproj", "{1975AEE8-05C5-42DE-8A8B-620168F9C1C9}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libgstpbutils", "libgstpbutils.vcproj", "{F0B70168-8AE3-4B71-B14E-E9BE419FA133}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -170,6 +186,10 @@ Global
 		{1975AEE8-05C5-42DE-8A8B-620168F9C1C9}.Debug|Win32.Build.0 = Debug|Win32
 		{1975AEE8-05C5-42DE-8A8B-620168F9C1C9}.Release|Win32.ActiveCfg = Debug|Win32
 		{1975AEE8-05C5-42DE-8A8B-620168F9C1C9}.Release|Win32.Build.0 = Debug|Win32
+		{F0B70168-8AE3-4B71-B14E-E9BE419FA133}.Debug|Win32.ActiveCfg = Debug|Win32
+		{F0B70168-8AE3-4B71-B14E-E9BE419FA133}.Debug|Win32.Build.0 = Debug|Win32
+		{F0B70168-8AE3-4B71-B14E-E9BE419FA133}.Release|Win32.ActiveCfg = Release|Win32
+		{F0B70168-8AE3-4B71-B14E-E9BE419FA133}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

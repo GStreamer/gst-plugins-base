@@ -226,6 +226,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\gst-libs\gst\interfaces\streamvolume.c"
+				>
+			</File>
+			<File
 				RelativePath="..\..\gst-libs\gst\interfaces\tuner.c"
 				>
 			</File>
@@ -235,6 +239,10 @@
 			</File>
 			<File
 				RelativePath="..\..\gst-libs\gst\interfaces\tunernorm.c"
+				>
+			</File>
+			<File
+				RelativePath="..\..\gst-libs\gst\interfaces\videoorientation.c"
 				>
 			</File>
 			<File

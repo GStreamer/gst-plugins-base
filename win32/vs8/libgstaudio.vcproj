@@ -188,6 +188,10 @@
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
 			>
 			<File
+				RelativePath="..\..\gst-libs\gst\audio\audio-enumtypes.c"
+				>
+			</File>
+			<File
 				RelativePath="..\..\gst-libs\gst\audio\audio.c"
 				>
 			</File>
@@ -196,11 +200,19 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\gst-libs\gst\audio\gstaudiodecoder.c"
+				>
+			</File>
+			<File
+				RelativePath="..\..\gst-libs\gst\audio\gstaudioencoder.c"
+				>
+			</File>
+			<File
 				RelativePath="..\..\gst-libs\gst\audio\gstaudiofilter.c"
 				>
 			</File>
 			<File
-				RelativePath="..\..\gst-libs\gst\audio\gstaudiofiltertemplate.c"
+				RelativePath="..\..\gst-libs\gst\audio\gstaudioiec61937.c"
 				>
 			</File>
 			<File
@@ -224,7 +236,7 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\gst-libs\gst\audio\audio-enumtypes.c"
+				RelativePath="..\..\gst-libs\gst\audio\mixerutils.c"
 				>
 			</File>
 			<File
