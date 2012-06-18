@@ -87,7 +87,7 @@
 #define GST_PACKAGE_ORIGIN "Unknown package origin"
 
 /* GStreamer package release date/time for plugins as YYYY-MM-DD */
-#define GST_PACKAGE_RELEASE_DATETIME "2012-02-23T10:41Z"
+#define GST_PACKAGE_RELEASE_DATETIME "2012-06-10T13:00Z"
 
 /* I know the API is subject to change. */
 #undef G_UDEV_API_IS_SUBJECT_TO_CHANGE
@@ -106,46 +106,46 @@
    the CoreFoundation framework. */
 #undef HAVE_CFPREFERENCESCOPYAPPVALUE
 
-/* Define if the host CPU is an Alpha */
+/* Define if the target CPU is an Alpha */
 #undef HAVE_CPU_ALPHA
 
-/* Define if the host CPU is an ARM */
+/* Define if the target CPU is an ARM */
 #undef HAVE_CPU_ARM
 
-/* Define if the host CPU is a CRIS */
+/* Define if the target CPU is a CRIS */
 #undef HAVE_CPU_CRIS
 
-/* Define if the host CPU is a CRISv32 */
+/* Define if the target CPU is a CRISv32 */
 #undef HAVE_CPU_CRISV32
 
-/* Define if the host CPU is a HPPA */
+/* Define if the target CPU is a HPPA */
 #undef HAVE_CPU_HPPA
 
-/* Define if the host CPU is an x86 */
+/* Define if the target CPU is an x86 */
 #define HAVE_CPU_I386 1
 
-/* Define if the host CPU is a IA64 */
+/* Define if the target CPU is a IA64 */
 #undef HAVE_CPU_IA64
 
-/* Define if the host CPU is a M68K */
+/* Define if the target CPU is a M68K */
 #undef HAVE_CPU_M68K
 
-/* Define if the host CPU is a MIPS */
+/* Define if the target CPU is a MIPS */
 #undef HAVE_CPU_MIPS
 
-/* Define if the host CPU is a PowerPC */
+/* Define if the target CPU is a PowerPC */
 #undef HAVE_CPU_PPC
 
-/* Define if the host CPU is a 64 bit PowerPC */
+/* Define if the target CPU is a 64 bit PowerPC */
 #undef HAVE_CPU_PPC64
 
-/* Define if the host CPU is a S390 */
+/* Define if the target CPU is a S390 */
 #undef HAVE_CPU_S390
 
-/* Define if the host CPU is a SPARC */
+/* Define if the target CPU is a SPARC */
 #undef HAVE_CPU_SPARC
 
-/* Define if the host CPU is a x86_64 */
+/* Define if the target CPU is a x86_64 */
 #undef HAVE_CPU_X86_64
 
 /* Define if the GNU dcgettext() function is already present or preinstalled.
@@ -393,6 +393,9 @@
 
 /* Define to 1 if you have the ANSI C header files. */
 #undef STDC_HEADERS
+
+/* the target CPU */
+#undef TARGET_CPU
 
 /* "Define if building for android" */
 #undef USE_TREMOLO
