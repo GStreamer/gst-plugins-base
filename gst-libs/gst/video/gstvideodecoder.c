@@ -424,6 +424,8 @@ static GstFlowReturn gst_video_decoder_decode_frame (GstVideoDecoder * decoder,
     GstVideoCodecFrame * frame);
 static gboolean gst_video_decoder_set_src_caps (GstVideoDecoder * decoder);
 
+static void gst_video_decoder_release_frame (GstVideoDecoder * dec,
+    GstVideoCodecFrame * frame);
 static guint64
 gst_video_decoder_get_timestamp (GstVideoDecoder * decoder, int picture_number);
 static guint64 gst_video_decoder_get_frame_duration (GstVideoDecoder * decoder,
@@ -432,6 +434,8 @@ static GstVideoCodecFrame *gst_video_decoder_new_frame (GstVideoDecoder *
     decoder);
 static GstFlowReturn gst_video_decoder_clip_and_push_buf (GstVideoDecoder *
     decoder, GstBuffer * buf);
+static GstFlowReturn gst_video_decoder_flush_parse (GstVideoDecoder * dec);
+
 static void gst_video_decoder_clear_queues (GstVideoDecoder * dec);
 
 GST_BOILERPLATE (GstVideoDecoder, gst_video_decoder,
@@ -1621,13 +1625,12 @@ gst_video_decoder_flush_decode (GstVideoDecoder * dec)
   GstFlowReturn res = GST_FLOW_OK;
   GList *walk;
 
-  walk = priv->decode;
-
   GST_DEBUG_OBJECT (dec, "flushing buffers to decode");
 
   /* clear buffer and decoder state */
   gst_video_decoder_flush (dec, FALSE);
 
+  walk = priv->decode;
   while (walk) {
     GList *next;
     GstVideoCodecFrame *frame = (GstVideoCodecFrame *) (walk->data);
@@ -1638,9 +1641,13 @@ gst_video_decoder_flush_decode (GstVideoDecoder * dec)
 
     next = walk->next;
 
+    priv->decode = g_list_delete_link (priv->decode, walk);
+
     /* decode buffer, resulting data prepended to queue */
     gst_video_codec_frame_ref (frame);
     res = gst_video_decoder_decode_frame (dec, frame);
+    if (res != GST_FLOW_OK)
+      break;
 
     walk = next;
   }
@@ -1648,6 +1655,13 @@ gst_video_decoder_flush_decode (GstVideoDecoder * dec)
   return res;
 }
 
+/* gst_video_decoder_flush_parse is called from the
+ * chain_reverse() function when a buffer containing
+ * a DISCONT - indicating that reverse playback
+ * looped back to the next data block, and therefore
+ * all available data should be fed through the
+ * decoder and frames gathered for reversed output
+ */
 static GstFlowReturn
 gst_video_decoder_flush_parse (GstVideoDecoder * dec)
 {
@@ -1655,21 +1669,25 @@ gst_video_decoder_flush_parse (GstVideoDecoder * dec)
   GstFlowReturn res = GST_FLOW_OK;
   GList *walk;
 
-  walk = priv->parse;
-
   GST_DEBUG_OBJECT (dec, "flushing buffers to parsing");
+
+  /* Reverse the gather list, and prepend it to the parse list,
+   * then flush to parse whatever we can */
+  priv->gather = g_list_reverse (priv->gather);
+  priv->parse = g_list_concat (priv->gather, priv->parse);
+  priv->gather = NULL;
 
   /* clear buffer and decoder state */
   gst_video_decoder_flush (dec, FALSE);
 
+  walk = priv->parse;
   while (walk) {
-    GList *next;
     GstBuffer *buf = GST_BUFFER_CAST (walk->data);
+    GList *next = walk->next;
 
     GST_DEBUG_OBJECT (dec, "parsing buffer %p, ts %" GST_TIME_FORMAT,
         buf, GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (buf)));
 
-    next = walk->next;
     /* parse buffer, resulting frames prepended to parse_gather queue */
     gst_buffer_ref (buf);
     res = gst_video_decoder_chain_forward (dec, buf);
@@ -1686,23 +1704,30 @@ gst_video_decoder_flush_parse (GstVideoDecoder * dec)
     walk = next;
   }
 
-  /* now we can process frames */
-  GST_DEBUG_OBJECT (dec, "checking frames");
-  while (priv->parse_gather) {
-    GstVideoCodecFrame *frame;
+  /* now we can process frames. Start by moving each frame from the parse_gather
+   * to the decode list, reverse the order as we go, and stopping when/if we
+   * copy a keyframe. */
+  GST_DEBUG_OBJECT (dec, "checking parsed frames for a keyframe to decode");
+  walk = priv->parse_gather;
+  while (walk) {
+    GstVideoCodecFrame *frame = (GstVideoCodecFrame *) (walk->data);
 
-    frame = (GstVideoCodecFrame *) (priv->parse_gather->data);
     /* remove from the gather list */
-    priv->parse_gather =
-        g_list_delete_link (priv->parse_gather, priv->parse_gather);
-    /* copy to decode queue */
-    priv->decode = g_list_prepend (priv->decode, frame);
+    priv->parse_gather = g_list_remove_link (priv->parse_gather, walk);
+
+    /* move it to the front of the decode queue */
+    priv->decode = g_list_concat (walk, priv->decode);
 
     /* if we copied a keyframe, flush and decode the decode queue */
     if (GST_VIDEO_CODEC_FRAME_IS_SYNC_POINT (frame)) {
-      GST_DEBUG_OBJECT (dec, "copied keyframe");
+      GST_DEBUG_OBJECT (dec, "found keyframe %p with PTS %" GST_TIME_FORMAT,
+          frame, GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (frame->input_buffer)));
       res = gst_video_decoder_flush_decode (dec);
+      if (res != GST_FLOW_OK)
+        goto done;
     }
+
+    walk = priv->parse_gather;
   }
 
   /* now send queued data downstream */
@@ -1714,7 +1739,22 @@ gst_video_decoder_flush_parse (GstVideoDecoder * dec)
       /* avoid stray DISCONT from forward processing,
        * which have no meaning in reverse pushing */
       GST_BUFFER_FLAG_UNSET (buf, GST_BUFFER_FLAG_DISCONT);
-      res = gst_pad_push (dec->srcpad, buf);
+
+      /* Last chance to calculate a timestamp as we loop backwards
+       * through the list */
+      if (GST_BUFFER_TIMESTAMP (buf) != GST_CLOCK_TIME_NONE)
+        priv->last_timestamp_out = GST_BUFFER_TIMESTAMP (buf);
+      else if (priv->last_timestamp_out != GST_CLOCK_TIME_NONE &&
+          GST_BUFFER_DURATION (buf) != GST_CLOCK_TIME_NONE) {
+        GST_BUFFER_TIMESTAMP (buf) =
+            priv->last_timestamp_out - GST_BUFFER_DURATION (buf);
+        priv->last_timestamp_out = GST_BUFFER_TIMESTAMP (buf);
+        GST_LOG_OBJECT (dec,
+            "Calculated TS %" GST_TIME_FORMAT " working backwards",
+            GST_TIME_ARGS (priv->last_timestamp_out));
+      }
+
+      res = gst_video_decoder_clip_and_push_buf (dec, buf);
     } else {
       gst_buffer_unref (buf);
     }
@@ -1724,6 +1764,7 @@ gst_video_decoder_flush_parse (GstVideoDecoder * dec)
     walk = priv->output_queued;
   }
 
+done:
   return res;
 }
 
@@ -1736,16 +1777,8 @@ gst_video_decoder_chain_reverse (GstVideoDecoder * dec, GstBuffer * buf)
   /* if we have a discont, move buffers to the decode list */
   if (!buf || GST_BUFFER_IS_DISCONT (buf)) {
     GST_DEBUG_OBJECT (dec, "received discont");
-    while (priv->gather) {
-      GstBuffer *gbuf;
 
-      gbuf = GST_BUFFER_CAST (priv->gather->data);
-      /* remove from the gather list */
-      priv->gather = g_list_delete_link (priv->gather, priv->gather);
-      /* copy to parse queue */
-      priv->parse = g_list_prepend (priv->parse, gbuf);
-    }
-    /* parse and decode stuff in the parse queue */
+    /* parse and decode stuff in the gather and parse queues */
     gst_video_decoder_flush_parse (dec);
   }
 
@@ -2052,7 +2085,7 @@ gst_video_decoder_prepare_finish_frame (GstVideoDecoder *
 }
 
 static void
-gst_video_decoder_do_finish_frame (GstVideoDecoder * dec,
+gst_video_decoder_release_frame (GstVideoDecoder * dec,
     GstVideoCodecFrame * frame)
 {
   GList *link;
@@ -2118,7 +2151,7 @@ gst_video_decoder_drop_frame (GstVideoDecoder * dec, GstVideoCodecFrame * frame)
   gst_element_post_message (GST_ELEMENT_CAST (dec), qos_msg);
 
   /* now free the frame */
-  gst_video_decoder_do_finish_frame (dec, frame);
+  gst_video_decoder_release_frame (dec, frame);
 
   GST_VIDEO_DECODER_STREAM_UNLOCK (dec);
 
@@ -2215,7 +2248,7 @@ gst_video_decoder_finish_frame (GstVideoDecoder * decoder,
   }
 
 done:
-  gst_video_decoder_do_finish_frame (decoder, frame);
+  gst_video_decoder_release_frame (decoder, frame);
   GST_VIDEO_DECODER_STREAM_UNLOCK (decoder);
   return ret;
 }
@@ -2290,12 +2323,8 @@ gst_video_decoder_clip_and_push_buf (GstVideoDecoder * decoder, GstBuffer * buf)
    * the error count, if there is one */
   if (G_UNLIKELY (priv->error_count))
     priv->error_count--;
-  if (decoder->output_segment.rate < 0.0) {
-    GST_LOG_OBJECT (decoder, "queued buffer");
-    priv->output_queued = g_list_prepend (priv->output_queued, buf);
-  } else {
-    ret = gst_pad_push (decoder->srcpad, buf);
-  }
+
+  ret = gst_pad_push (decoder->srcpad, buf);
 
 done:
   return ret;
