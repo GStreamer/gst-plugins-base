@@ -1770,8 +1770,9 @@ gst_video_decoder_flush_parse (GstVideoDecoder * dec, gboolean at_eos)
             priv->last_timestamp_out - GST_BUFFER_DURATION (buf);
         priv->last_timestamp_out = GST_BUFFER_TIMESTAMP (buf);
         GST_LOG_OBJECT (dec,
-            "Calculated TS %" GST_TIME_FORMAT " working backwards",
-            GST_TIME_ARGS (priv->last_timestamp_out));
+            "Calculated TS %" GST_TIME_FORMAT " working backwards. Duration %"
+            GST_TIME_FORMAT, GST_TIME_ARGS (priv->last_timestamp_out),
+            GST_TIME_ARGS (GST_BUFFER_DURATION (buf)));
       }
 
       res = gst_video_decoder_clip_and_push_buf (dec, buf);
@@ -2432,7 +2433,7 @@ gst_video_decoder_get_frame_duration (GstVideoDecoder * decoder,
     fields = 2;
 
   return gst_util_uint64_scale (fields * GST_SECOND, state->info.fps_d,
-      state->info.fps_n);
+      state->info.fps_n * 2);
 }
 
 /**
