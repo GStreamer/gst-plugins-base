@@ -57,11 +57,11 @@ is_raw_caps (GstCaps * caps, gboolean audio)
   for (i = 0; i < n; i++) {
     s = gst_caps_get_structure (caps, i);
     name = gst_structure_get_name (s);
-    if (!g_str_has_prefix (name, prefix))
-      return FALSE;
+    if (g_str_has_prefix (name, prefix))
+      return TRUE;
   }
 
-  return TRUE;
+  return FALSE;
 }
 
 static void
