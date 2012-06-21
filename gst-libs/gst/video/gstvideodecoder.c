@@ -2740,7 +2740,7 @@ gst_video_decoder_set_src_caps (GstVideoDecoder * decoder)
 GstBuffer *
 gst_video_decoder_alloc_output_buffer (GstVideoDecoder * decoder)
 {
-  GstBuffer *buffer;
+  GstBuffer *buffer = NULL;
   GstFlowReturn flow_ret;
   GstVideoCodecState *state = decoder->priv->output_state;
   int num_bytes = GST_VIDEO_INFO_SIZE (&state->info);
