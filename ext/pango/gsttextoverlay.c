@@ -1637,6 +1637,7 @@ gst_text_overlay_push_frame (GstTextOverlay * overlay, GstBuffer * video_frame)
         break;
       case GST_VIDEO_FORMAT_AYUV:
       case GST_VIDEO_FORMAT_UYVY:
+      case GST_VIDEO_FORMAT_YUY2:
         gst_text_overlay_shade_packed_Y (overlay,
             GST_BUFFER_DATA (video_frame), xpos, xpos + overlay->image_width,
             ypos, ypos + overlay->image_height);
