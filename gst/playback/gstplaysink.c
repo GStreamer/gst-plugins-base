@@ -3017,19 +3017,6 @@ gst_play_sink_reconfigure (GstPlaySink * playsink)
     need_text = TRUE;
   }
 
-  GST_OBJECT_LOCK (playsink);
-  if (playsink->xoverlay_element)
-    gst_object_unref (playsink->xoverlay_element);
-  playsink->xoverlay_element = NULL;
-
-  if (playsink->colorbalance_element) {
-    g_signal_handlers_disconnect_by_func (playsink->colorbalance_element,
-        G_CALLBACK (colorbalance_value_changed_cb), playsink);
-    gst_object_unref (playsink->colorbalance_element);
-  }
-  playsink->colorbalance_element = NULL;
-  GST_OBJECT_UNLOCK (playsink);
-
   if (((flags & GST_PLAY_FLAG_VIDEO)
           || (flags & GST_PLAY_FLAG_NATIVE_VIDEO)) && playsink->video_pad) {
     /* we have video and we are requested to show it */
@@ -3115,6 +3102,19 @@ gst_play_sink_reconfigure (GstPlaySink * playsink)
         activate_chain (GST_PLAY_CHAIN (playsink->videochain), FALSE);
         free_chain ((GstPlayChain *) playsink->videochain);
         playsink->videochain = NULL;
+
+        GST_OBJECT_LOCK (playsink);
+        if (playsink->xoverlay_element)
+          gst_object_unref (playsink->xoverlay_element);
+        playsink->xoverlay_element = NULL;
+
+        if (playsink->colorbalance_element) {
+          g_signal_handlers_disconnect_by_func (playsink->colorbalance_element,
+              G_CALLBACK (colorbalance_value_changed_cb), playsink);
+          gst_object_unref (playsink->colorbalance_element);
+        }
+        playsink->colorbalance_element = NULL;
+        GST_OBJECT_UNLOCK (playsink);
       }
     }
 
@@ -3226,6 +3226,19 @@ gst_play_sink_reconfigure (GstPlaySink * playsink)
 
     if (playsink->video_pad)
       gst_ghost_pad_set_target (GST_GHOST_PAD_CAST (playsink->video_pad), NULL);
+
+    GST_OBJECT_LOCK (playsink);
+    if (playsink->xoverlay_element)
+      gst_object_unref (playsink->xoverlay_element);
+    playsink->xoverlay_element = NULL;
+
+    if (playsink->colorbalance_element) {
+      g_signal_handlers_disconnect_by_func (playsink->colorbalance_element,
+          G_CALLBACK (colorbalance_value_changed_cb), playsink);
+      gst_object_unref (playsink->colorbalance_element);
+    }
+    playsink->colorbalance_element = NULL;
+    GST_OBJECT_UNLOCK (playsink);
   }
 
   if (need_audio) {
