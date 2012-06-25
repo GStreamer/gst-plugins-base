@@ -1735,6 +1735,10 @@ gen_video_chain (GstPlaySink * playsink, gboolean raw, gboolean async)
     gst_object_unref (playsink->colorbalance_element);
   }
   playsink->colorbalance_element = find_color_balance_element (chain->sink);
+  if (playsink->colorbalance_element) {
+    g_signal_connect (playsink->colorbalance_element, "value-changed",
+        G_CALLBACK (colorbalance_value_changed_cb), playsink);
+  }
   GST_OBJECT_UNLOCK (playsink);
 
   if (!(playsink->flags & GST_PLAY_FLAG_NATIVE_VIDEO)
@@ -1921,6 +1925,10 @@ setup_video_chain (GstPlaySink * playsink, gboolean raw, gboolean async)
     gst_object_unref (playsink->colorbalance_element);
   }
   playsink->colorbalance_element = find_color_balance_element (chain->sink);
+  if (playsink->colorbalance_element) {
+    g_signal_connect (playsink->colorbalance_element, "value-changed",
+        G_CALLBACK (colorbalance_value_changed_cb), playsink);
+  }
   GST_OBJECT_UNLOCK (playsink);
 
   if (chain->conv) {
