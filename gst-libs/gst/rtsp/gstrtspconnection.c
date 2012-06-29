@@ -77,7 +77,6 @@
 #endif
 #include <winsock2.h>
 #include <ws2tcpip.h>
-#define EINPROGRESS WSAEINPROGRESS
 #else
 #include <sys/ioctl.h>
 #include <netdb.h>
