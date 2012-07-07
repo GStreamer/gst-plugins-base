@@ -809,8 +809,8 @@ gst_video_decoder_flush (GstVideoDecoder * dec, gboolean hard)
     gst_segment_init (&dec->output_segment, GST_FORMAT_UNDEFINED);
     gst_video_decoder_clear_queues (dec);
     priv->error_count = 0;
-    g_list_free_full (priv->current_frame_events,
-        (GDestroyNotify) gst_event_unref);
+    g_list_foreach (priv->current_frame_events, (GFunc) gst_event_unref, NULL);
+    g_list_free (priv->current_frame_events);
     priv->current_frame_events = NULL;
   }
   /* and get (re)set for the sequel */
@@ -1494,8 +1494,8 @@ gst_video_decoder_clear_queues (GstVideoDecoder * dec)
 {
   GstVideoDecoderPrivate *priv = dec->priv;
 
-  g_list_free_full (priv->output_queued,
-      (GDestroyNotify) gst_mini_object_unref);
+  g_list_foreach (priv->output_queued, (GFunc) gst_mini_object_unref, NULL);
+  g_list_free (priv->output_queued);
   priv->output_queued = NULL;
 
   g_list_foreach (priv->gather, (GFunc) gst_mini_object_unref, NULL);
@@ -1569,7 +1569,8 @@ gst_video_decoder_reset (GstVideoDecoder * decoder, gboolean full)
   priv->decode_frame_number = 0;
   priv->base_picture_number = 0;
 
-  g_list_free_full (priv->frames, (GDestroyNotify) gst_video_codec_frame_unref);
+  g_list_foreach (priv->frames, (GFunc) gst_video_codec_frame_unref, NULL);
+  g_list_free (priv->frames);
   priv->frames = NULL;
 
   priv->bytes_out = 0;
@@ -1894,8 +1895,9 @@ gst_video_decoder_change_state (GstElement * element, GstStateChange transition)
 
       GST_VIDEO_DECODER_STREAM_LOCK (decoder);
       gst_video_decoder_reset (decoder, TRUE);
-      g_list_free_full (decoder->priv->current_frame_events,
-          (GDestroyNotify) gst_event_unref);
+      g_list_foreach (decoder->priv->current_frame_events,
+          (GFunc) gst_event_unref, NULL);
+      g_list_free (decoder->priv->current_frame_events);
       decoder->priv->current_frame_events = NULL;
       GST_VIDEO_DECODER_STREAM_UNLOCK (decoder);
       break;
