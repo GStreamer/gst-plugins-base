@@ -520,9 +520,7 @@ wrong_template:
 static void
 gst_ogg_mux_release_pad (GstElement * element, GstPad * pad)
 {
-  GstOggMux *ogg_mux;
-
-  ogg_mux = GST_OGG_MUX (gst_pad_get_parent (pad));
+  GstOggMux *ogg_mux = GST_OGG_MUX (gst_pad_get_parent (pad));
 
   gst_collect_pads2_remove_pad (ogg_mux->collect, pad);
   gst_element_remove_pad (element, pad);
@@ -534,19 +532,29 @@ gst_ogg_mux_release_pad (GstElement * element, GstPad * pad)
 static gboolean
 gst_ogg_mux_handle_src_event (GstPad * pad, GstEvent * event)
 {
-  GstEventType type;
-
-  type = event ? GST_EVENT_TYPE (event) : GST_EVENT_UNKNOWN;
+  gboolean res = FALSE;
+  GstOggMux *ogg_mux = GST_OGG_MUX (gst_pad_get_parent (pad));
+  GstEventType type = event ? GST_EVENT_TYPE (event) : GST_EVENT_UNKNOWN;
 
   switch (type) {
-    case GST_EVENT_SEEK:
-      /* disable seeking for now */
-      return FALSE;
+    case GST_EVENT_SEEK:{
+      GstSeekFlags flags;
+
+      gst_event_parse_seek (event, NULL, NULL, &flags, NULL, NULL, NULL, NULL);
+      if (!ogg_mux->need_headers && (flags & GST_SEEK_FLAG_FLUSH) != 0) {
+        /* disable flushing seeks once we started */
+        goto eat;
+      }
+      break;
+    }
     default:
       break;
   }
 
-  return gst_pad_event_default (pad, event);
+  res = gst_pad_event_default (pad, event);
+eat:
+  gst_object_unref (ogg_mux);
+  return res;
 }
 
 static GstBuffer *
