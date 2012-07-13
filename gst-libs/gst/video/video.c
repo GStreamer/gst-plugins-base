@@ -125,12 +125,17 @@ typedef struct
 #define MAKE_YUVA_FORMAT(name, desc, fourcc, depth, pstride, plane, offs, sub) \
  { fourcc, {GST_VIDEO_FORMAT_ ##name, G_STRINGIFY(name), desc, GST_VIDEO_FORMAT_FLAG_YUV | GST_VIDEO_FORMAT_FLAG_ALPHA, depth, pstride, plane, offs, sub } }
 
+#define MAKE_YUVA_LE_FORMAT(name, desc, fourcc, depth, pstride, plane, offs, sub) \
+ { fourcc, {GST_VIDEO_FORMAT_ ##name, G_STRINGIFY(name), desc, GST_VIDEO_FORMAT_FLAG_YUV | GST_VIDEO_FORMAT_FLAG_ALPHA | GST_VIDEO_FORMAT_FLAG_LE, depth, pstride, plane, offs, sub } }
+
 #define MAKE_RGB_FORMAT(name, desc, depth, pstride, plane, offs, sub) \
  { 0x00000000, {GST_VIDEO_FORMAT_ ##name, G_STRINGIFY(name), desc, GST_VIDEO_FORMAT_FLAG_RGB, depth, pstride, plane, offs, sub } }
 #define MAKE_RGB_LE_FORMAT(name, desc, depth, pstride, plane, offs, sub) \
  { 0x00000000, {GST_VIDEO_FORMAT_ ##name, G_STRINGIFY(name), desc, GST_VIDEO_FORMAT_FLAG_RGB | GST_VIDEO_FORMAT_FLAG_LE, depth, pstride, plane, offs, sub } }
 #define MAKE_RGBA_FORMAT(name, desc, depth, pstride, plane, offs, sub) \
  { 0x00000000, {GST_VIDEO_FORMAT_ ##name, G_STRINGIFY(name), desc, GST_VIDEO_FORMAT_FLAG_RGB | GST_VIDEO_FORMAT_FLAG_ALPHA, depth, pstride, plane, offs, sub } }
+#define MAKE_RGBA_LE_FORMAT(name, desc, depth, pstride, plane, offs, sub) \
+ { 0x00000000, {GST_VIDEO_FORMAT_ ##name, G_STRINGIFY(name), desc, GST_VIDEO_FORMAT_FLAG_RGB | GST_VIDEO_FORMAT_FLAG_ALPHA | GST_VIDEO_FORMAT_FLAG_LE, depth, pstride, plane, offs, sub } }
 
 #define MAKE_GRAY_FORMAT(name, desc, depth, pstride, plane, offs, sub) \
  { 0x00000000, {GST_VIDEO_FORMAT_ ##name, G_STRINGIFY(name), desc, GST_VIDEO_FORMAT_FLAG_GRAY, depth, pstride, plane, offs, sub } }
@@ -248,11 +253,18 @@ static VideoFormat formats[] = {
   MAKE_YUV_FORMAT (IYU1, "raw video", GST_MAKE_FOURCC ('I', 'Y', 'U', '1'),
       DPTH888, PSTR0,
       PLANE0, OFFS104, SUB411),
+#if G_BYTE_ORDER == G_LITTLE_ENDIAN
+  MAKE_RGBA_LE_FORMAT (ARGB64, "raw video", DPTH16_16_16_16, PSTR8888,
+      PLANE0, OFFS2460, SUB444),
+  MAKE_YUVA_LE_FORMAT (AYUV64, "raw video", 0x00000000, DPTH16_16_16_16,
+      PSTR8888, PLANE0, OFFS2460, SUB444),
+#else
   MAKE_RGBA_FORMAT (ARGB64, "raw video", DPTH16_16_16_16, PSTR8888, PLANE0,
       OFFS2460,
       SUB444),
   MAKE_YUVA_FORMAT (AYUV64, "raw video", 0x00000000, DPTH16_16_16_16, PSTR8888,
-      PLANE0, OFFS0, SUB444),
+      PLANE0, OFFS2460, SUB444),
+#endif
   MAKE_RGB_FORMAT (r210, "raw video", DPTH10_10_10, PSTR444, PLANE0, OFFS0,
       SUB444),
   {0x00000000, {GST_VIDEO_FORMAT_ENCODED, "ENCODED", "encoded video",
