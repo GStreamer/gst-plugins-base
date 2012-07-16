@@ -100,6 +100,7 @@ GST_START_TEST (test_event)
   GstElement *bin, *src1, *src2, *adder, *sink;
   GstBus *bus;
   GstEvent *seek_event;
+  GstStateChangeReturn state_res;
   gboolean res;
   GstPad *srcpad, *sinkpad;
   GstStreamConsistency *chk_1, *chk_2, *chk_3;
@@ -166,24 +167,24 @@ GST_START_TEST (test_event)
   GST_INFO ("starting test");
 
   /* prepare playing */
-  res = gst_element_set_state (bin, GST_STATE_PAUSED);
-  fail_unless (res != GST_STATE_CHANGE_FAILURE, NULL);
+  state_res = gst_element_set_state (bin, GST_STATE_PAUSED);
+  fail_unless (state_res != GST_STATE_CHANGE_FAILURE, NULL);
 
   /* wait for completion */
-  res = gst_element_get_state (bin, NULL, NULL, GST_CLOCK_TIME_NONE);
-  fail_unless (res != GST_STATE_CHANGE_FAILURE, NULL);
+  state_res = gst_element_get_state (bin, NULL, NULL, GST_CLOCK_TIME_NONE);
+  fail_unless (state_res != GST_STATE_CHANGE_FAILURE, NULL);
 
   res = gst_element_send_event (bin, seek_event);
   fail_unless (res == TRUE, NULL);
 
   /* run pipeline */
-  res = gst_element_set_state (bin, GST_STATE_PLAYING);
-  fail_unless (res != GST_STATE_CHANGE_FAILURE, NULL);
+  state_res = gst_element_set_state (bin, GST_STATE_PLAYING);
+  fail_unless (state_res != GST_STATE_CHANGE_FAILURE, NULL);
 
   g_main_loop_run (main_loop);
 
-  res = gst_element_set_state (bin, GST_STATE_NULL);
-  fail_unless (res != GST_STATE_CHANGE_FAILURE, NULL);
+  state_res = gst_element_set_state (bin, GST_STATE_NULL);
+  fail_unless (state_res != GST_STATE_CHANGE_FAILURE, NULL);
 
   fail_unless (position == 2 * GST_SECOND, NULL);
 
@@ -192,8 +193,8 @@ GST_START_TEST (test_event)
   gst_consistency_checker_free (chk_1);
   gst_consistency_checker_free (chk_2);
   gst_consistency_checker_free (chk_3);
-  gst_object_unref (G_OBJECT (bus));
-  gst_object_unref (G_OBJECT (bin));
+  gst_object_unref (bus);
+  gst_object_unref (bin);
 }
 
 GST_END_TEST;
@@ -206,6 +207,7 @@ test_play_twice_message_received (GstBus * bus, GstMessage * message,
     GstPipeline * bin)
 {
   gboolean res;
+  GstStateChangeReturn state_res;
 
   GST_INFO ("bus message from \"%" GST_PTR_FORMAT "\": %" GST_PTR_FORMAT,
       GST_MESSAGE_SRC (message), message);
@@ -214,25 +216,26 @@ test_play_twice_message_received (GstBus * bus, GstMessage * message,
     case GST_MESSAGE_SEGMENT_DONE:
       play_count++;
       if (play_count == 1) {
-        res = gst_element_set_state (GST_ELEMENT (bin), GST_STATE_READY);
-        fail_unless (res != GST_STATE_CHANGE_FAILURE, NULL);
+        state_res = gst_element_set_state (GST_ELEMENT (bin), GST_STATE_READY);
+        fail_unless (state_res != GST_STATE_CHANGE_FAILURE, NULL);
 
         /* prepare playing again */
-        res = gst_element_set_state (GST_ELEMENT (bin), GST_STATE_PAUSED);
-        fail_unless (res != GST_STATE_CHANGE_FAILURE, NULL);
+        state_res = gst_element_set_state (GST_ELEMENT (bin), GST_STATE_PAUSED);
+        fail_unless (state_res != GST_STATE_CHANGE_FAILURE, NULL);
 
         /* wait for completion */
-        res =
+        state_res =
             gst_element_get_state (GST_ELEMENT (bin), NULL, NULL,
             GST_CLOCK_TIME_NONE);
-        fail_unless (res != GST_STATE_CHANGE_FAILURE, NULL);
+        fail_unless (state_res != GST_STATE_CHANGE_FAILURE, NULL);
 
         res = gst_element_send_event (GST_ELEMENT (bin),
             gst_event_ref (play_seek_event));
         fail_unless (res == TRUE, NULL);
 
-        res = gst_element_set_state (GST_ELEMENT (bin), GST_STATE_PLAYING);
-        fail_unless (res != GST_STATE_CHANGE_FAILURE, NULL);
+        state_res =
+            gst_element_set_state (GST_ELEMENT (bin), GST_STATE_PLAYING);
+        fail_unless (state_res != GST_STATE_CHANGE_FAILURE, NULL);
       } else {
         g_main_loop_quit (main_loop);
       }
@@ -249,6 +252,7 @@ GST_START_TEST (test_play_twice)
   GstElement *bin, *src1, *src2, *adder, *sink;
   GstBus *bus;
   gboolean res;
+  GstStateChangeReturn state_res;
   GstPad *srcpad;
   GstStreamConsistency *consist;
 
@@ -295,14 +299,14 @@ GST_START_TEST (test_play_twice)
   GST_INFO ("starting test");
 
   /* prepare playing */
-  res = gst_element_set_state (bin, GST_STATE_PAUSED);
-  fail_unless (res != GST_STATE_CHANGE_FAILURE, NULL);
+  state_res = gst_element_set_state (bin, GST_STATE_PAUSED);
+  fail_unless (state_res != GST_STATE_CHANGE_FAILURE, NULL);
 
   /* wait for completion */
-  res =
+  state_res =
       gst_element_get_state (GST_ELEMENT (bin), NULL, NULL,
       GST_CLOCK_TIME_NONE);
-  fail_unless (res != GST_STATE_CHANGE_FAILURE, NULL);
+  fail_unless (state_res != GST_STATE_CHANGE_FAILURE, NULL);
 
   res = gst_element_send_event (bin, gst_event_ref (play_seek_event));
   fail_unless (res == TRUE, NULL);
@@ -310,13 +314,13 @@ GST_START_TEST (test_play_twice)
   GST_INFO ("seeked");
 
   /* run pipeline */
-  res = gst_element_set_state (bin, GST_STATE_PLAYING);
-  fail_unless (res != GST_STATE_CHANGE_FAILURE, NULL);
+  state_res = gst_element_set_state (bin, GST_STATE_PLAYING);
+  fail_unless (state_res != GST_STATE_CHANGE_FAILURE, NULL);
 
   g_main_loop_run (main_loop);
 
-  res = gst_element_set_state (bin, GST_STATE_NULL);
-  fail_unless (res != GST_STATE_CHANGE_FAILURE, NULL);
+  state_res = gst_element_set_state (bin, GST_STATE_NULL);
+  fail_unless (state_res != GST_STATE_CHANGE_FAILURE, NULL);
 
   fail_unless (play_count == 2, NULL);
 
@@ -324,8 +328,8 @@ GST_START_TEST (test_play_twice)
   g_main_loop_unref (main_loop);
   gst_consistency_checker_free (consist);
   gst_event_ref (play_seek_event);
-  gst_object_unref (G_OBJECT (bus));
-  gst_object_unref (G_OBJECT (bin));
+  gst_object_unref (bus);
+  gst_object_unref (bin);
 }
 
 GST_END_TEST;
@@ -335,6 +339,7 @@ GST_START_TEST (test_play_twice_then_add_and_play_again)
   GstElement *bin, *src1, *src2, *src3, *adder, *sink;
   GstBus *bus;
   gboolean res;
+  GstStateChangeReturn state_res;
   gint i;
   GstPad *srcpad;
   GstStreamConsistency *consist;
@@ -384,14 +389,14 @@ GST_START_TEST (test_play_twice_then_add_and_play_again)
     GST_INFO ("starting test-loop %d", i);
 
     /* prepare playing */
-    res = gst_element_set_state (bin, GST_STATE_PAUSED);
-    fail_unless (res != GST_STATE_CHANGE_FAILURE, NULL);
+    state_res = gst_element_set_state (bin, GST_STATE_PAUSED);
+    fail_unless (state_res != GST_STATE_CHANGE_FAILURE, NULL);
 
     /* wait for completion */
-    res =
+    state_res =
         gst_element_get_state (GST_ELEMENT (bin), NULL, NULL,
         GST_CLOCK_TIME_NONE);
-    fail_unless (res != GST_STATE_CHANGE_FAILURE, NULL);
+    fail_unless (state_res != GST_STATE_CHANGE_FAILURE, NULL);
 
     res = gst_element_send_event (bin, gst_event_ref (play_seek_event));
     fail_unless (res == TRUE, NULL);
@@ -399,13 +404,13 @@ GST_START_TEST (test_play_twice_then_add_and_play_again)
     GST_INFO ("seeked");
 
     /* run pipeline */
-    res = gst_element_set_state (bin, GST_STATE_PLAYING);
-    fail_unless (res != GST_STATE_CHANGE_FAILURE, NULL);
+    state_res = gst_element_set_state (bin, GST_STATE_PLAYING);
+    fail_unless (state_res != GST_STATE_CHANGE_FAILURE, NULL);
 
     g_main_loop_run (main_loop);
 
-    res = gst_element_set_state (bin, GST_STATE_READY);
-    fail_unless (res != GST_STATE_CHANGE_FAILURE, NULL);
+    state_res = gst_element_set_state (bin, GST_STATE_READY);
+    fail_unless (state_res != GST_STATE_CHANGE_FAILURE, NULL);
 
     fail_unless (play_count == 2, NULL);
 
@@ -422,15 +427,15 @@ GST_START_TEST (test_play_twice_then_add_and_play_again)
     gst_consistency_checker_reset (consist);
   }
 
-  res = gst_element_set_state (bin, GST_STATE_NULL);
-  fail_unless (res != GST_STATE_CHANGE_FAILURE, NULL);
+  state_res = gst_element_set_state (bin, GST_STATE_NULL);
+  fail_unless (state_res != GST_STATE_CHANGE_FAILURE, NULL);
 
   /* cleanup */
   g_main_loop_unref (main_loop);
   gst_event_ref (play_seek_event);
   gst_consistency_checker_free (consist);
-  gst_object_unref (G_OBJECT (bus));
-  gst_object_unref (G_OBJECT (bin));
+  gst_object_unref (bus);
+  gst_object_unref (bin);
 }
 
 GST_END_TEST;
@@ -460,6 +465,7 @@ GST_START_TEST (test_live_seeking)
   GstElement *bin, *src1, *src2, *ac1, *ac2, *adder, *sink;
   GstBus *bus;
   gboolean res;
+  GstStateChangeReturn state_res;
   GstPad *srcpad;
   gint i;
   GstStreamConsistency *consist;
@@ -484,11 +490,11 @@ GST_START_TEST (test_live_seeking)
     goto cleanup;
   }
   /* Test that the audio source can get to paused, else skip */
-  res = gst_element_set_state (src1, GST_STATE_PAUSED);
+  state_res = gst_element_set_state (src1, GST_STATE_PAUSED);
   (void) gst_element_set_state (src1, GST_STATE_NULL);
   gst_object_unref (src1);
 
-  if (res == GST_STATE_CHANGE_FAILURE)
+  if (state_res == GST_STATE_CHANGE_FAILURE)
     goto cleanup;
   src1 = gst_element_factory_make ("alsasrc", "src1");
 
@@ -538,14 +544,14 @@ GST_START_TEST (test_live_seeking)
     GST_INFO ("starting test-loop %d", i);
 
     /* prepare playing */
-    res = gst_element_set_state (bin, GST_STATE_PAUSED);
-    fail_unless (res != GST_STATE_CHANGE_FAILURE);
+    state_res = gst_element_set_state (bin, GST_STATE_PAUSED);
+    fail_unless (state_res != GST_STATE_CHANGE_FAILURE);
 
     /* wait for completion */
-    res =
+    state_res =
         gst_element_get_state (GST_ELEMENT (bin), NULL, NULL,
         GST_CLOCK_TIME_NONE);
-    fail_unless (res != GST_STATE_CHANGE_FAILURE, NULL);
+    fail_unless (state_res != GST_STATE_CHANGE_FAILURE, NULL);
 
     res = gst_element_send_event (bin, gst_event_ref (play_seek_event));
 #if 1
@@ -558,15 +564,15 @@ GST_START_TEST (test_live_seeking)
     GST_INFO ("seeked");
 
     /* run pipeline */
-    res = gst_element_set_state (bin, GST_STATE_PLAYING);
-    fail_unless (res != GST_STATE_CHANGE_FAILURE, NULL);
+    state_res = gst_element_set_state (bin, GST_STATE_PLAYING);
+    fail_unless (state_res != GST_STATE_CHANGE_FAILURE, NULL);
 
     GST_INFO ("playing");
 
     g_main_loop_run (main_loop);
 
-    res = gst_element_set_state (bin, GST_STATE_NULL);
-    fail_unless (res != GST_STATE_CHANGE_FAILURE, NULL);
+    state_res = gst_element_set_state (bin, GST_STATE_NULL);
+    fail_unless (state_res != GST_STATE_CHANGE_FAILURE, NULL);
 
     gst_consistency_checker_reset (consist);
   }
@@ -578,8 +584,8 @@ cleanup:
     g_main_loop_unref (main_loop);
   if (play_seek_event)
     gst_event_unref (play_seek_event);
-  gst_object_unref (G_OBJECT (bus));
-  gst_object_unref (G_OBJECT (bin));
+  gst_object_unref (bus);
+  gst_object_unref (bin);
 }
 
 GST_END_TEST;
@@ -591,6 +597,7 @@ GST_START_TEST (test_add_pad)
   GstBus *bus;
   GstPad *srcpad;
   gboolean res;
+  GstStateChangeReturn state_res;
 
   GST_INFO ("preparing test");
 
@@ -628,14 +635,14 @@ GST_START_TEST (test_add_pad)
   GST_INFO ("starting test");
 
   /* prepare playing */
-  res = gst_element_set_state (bin, GST_STATE_PAUSED);
-  fail_unless (res != GST_STATE_CHANGE_FAILURE, NULL);
+  state_res = gst_element_set_state (bin, GST_STATE_PAUSED);
+  fail_unless (state_res != GST_STATE_CHANGE_FAILURE, NULL);
 
   /* wait for completion */
-  res =
+  state_res =
       gst_element_get_state (GST_ELEMENT (bin), NULL, NULL,
       GST_CLOCK_TIME_NONE);
-  fail_unless (res != GST_STATE_CHANGE_FAILURE, NULL);
+  fail_unless (state_res != GST_STATE_CHANGE_FAILURE, NULL);
 
   /* add other element */
   gst_bin_add_many (GST_BIN (bin), src2, NULL);
@@ -645,21 +652,22 @@ GST_START_TEST (test_add_pad)
   fail_unless (res == TRUE, NULL);
 
   /* set to PAUSED as well */
-  res = gst_element_set_state (src2, GST_STATE_PAUSED);
+  state_res = gst_element_set_state (src2, GST_STATE_PAUSED);
+  fail_unless (state_res != GST_STATE_CHANGE_FAILURE, NULL);
 
   /* now play all */
-  res = gst_element_set_state (bin, GST_STATE_PLAYING);
-  fail_unless (res != GST_STATE_CHANGE_FAILURE, NULL);
+  state_res = gst_element_set_state (bin, GST_STATE_PLAYING);
+  fail_unless (state_res != GST_STATE_CHANGE_FAILURE, NULL);
 
   g_main_loop_run (main_loop);
 
-  res = gst_element_set_state (bin, GST_STATE_NULL);
-  fail_unless (res != GST_STATE_CHANGE_FAILURE, NULL);
+  state_res = gst_element_set_state (bin, GST_STATE_NULL);
+  fail_unless (state_res != GST_STATE_CHANGE_FAILURE, NULL);
 
   /* cleanup */
   g_main_loop_unref (main_loop);
-  gst_object_unref (G_OBJECT (bus));
-  gst_object_unref (G_OBJECT (bin));
+  gst_object_unref (bus);
+  gst_object_unref (bin);
 }
 
 GST_END_TEST;
@@ -671,6 +679,7 @@ GST_START_TEST (test_remove_pad)
   GstBus *bus;
   GstPad *pad, *srcpad;
   gboolean res;
+  GstStateChangeReturn state_res;
 
   GST_INFO ("preparing test");
 
@@ -709,8 +718,8 @@ GST_START_TEST (test_remove_pad)
 
   /* prepare playing, this will not preroll as adder is waiting
    * on the unconnected sinkpad. */
-  res = gst_element_set_state (bin, GST_STATE_PAUSED);
-  fail_unless (res != GST_STATE_CHANGE_FAILURE, NULL);
+  state_res = gst_element_set_state (bin, GST_STATE_PAUSED);
+  fail_unless (state_res != GST_STATE_CHANGE_FAILURE, NULL);
 
   /* wait for completion for one second, will return ASYNC */
   res = gst_element_get_state (GST_ELEMENT (bin), NULL, NULL, GST_SECOND);
@@ -722,24 +731,24 @@ GST_START_TEST (test_remove_pad)
   gst_object_unref (pad);
 
   /* wait for completion, should work now */
-  res =
+  state_res =
       gst_element_get_state (GST_ELEMENT (bin), NULL, NULL,
       GST_CLOCK_TIME_NONE);
-  fail_unless (res != GST_STATE_CHANGE_FAILURE, NULL);
+  fail_unless (state_res != GST_STATE_CHANGE_FAILURE, NULL);
 
   /* now play all */
-  res = gst_element_set_state (bin, GST_STATE_PLAYING);
-  fail_unless (res != GST_STATE_CHANGE_FAILURE, NULL);
+  state_res = gst_element_set_state (bin, GST_STATE_PLAYING);
+  fail_unless (state_res != GST_STATE_CHANGE_FAILURE, NULL);
 
   g_main_loop_run (main_loop);
 
-  res = gst_element_set_state (bin, GST_STATE_NULL);
-  fail_unless (res != GST_STATE_CHANGE_FAILURE, NULL);
+  state_res = gst_element_set_state (bin, GST_STATE_NULL);
+  fail_unless (state_res != GST_STATE_CHANGE_FAILURE, NULL);
 
   /* cleanup */
   g_main_loop_unref (main_loop);
-  gst_object_unref (G_OBJECT (bus));
-  gst_object_unref (G_OBJECT (bin));
+  gst_object_unref (bus);
+  gst_object_unref (bin);
 }
 
 GST_END_TEST;
@@ -761,6 +770,7 @@ GST_START_TEST (test_clip)
   GstBus *bus;
   GstPad *sinkpad;
   gboolean res;
+  GstStateChangeReturn state_res;
   GstFlowReturn ret;
   GstEvent *event;
   GstBuffer *buffer;
@@ -788,8 +798,8 @@ GST_START_TEST (test_clip)
   fail_unless (res == TRUE, NULL);
 
   /* set to playing */
-  res = gst_element_set_state (bin, GST_STATE_PLAYING);
-  fail_unless (res != GST_STATE_CHANGE_FAILURE, NULL);
+  state_res = gst_element_set_state (bin, GST_STATE_PLAYING);
+  fail_unless (state_res != GST_STATE_CHANGE_FAILURE, NULL);
 
   /* create an unconnected sinkpad in adder, should also automatically activate
    * the pad */
