@@ -2207,15 +2207,17 @@ gst_video_decoder_finish_frame (GstVideoDecoder * decoder,
 {
   GstFlowReturn ret = GST_FLOW_OK;
   GstVideoDecoderPrivate *priv = decoder->priv;
-  GstVideoCodecState *state = priv->output_state;
+  GstVideoCodecState *state;
   GstBuffer *output_buffer;
 
   GST_LOG_OBJECT (decoder, "finish frame %p", frame);
 
+  GST_VIDEO_DECODER_STREAM_LOCK (decoder);
+
   if (G_UNLIKELY (priv->output_state_changed))
     gst_video_decoder_negotiate (decoder);
 
-  GST_VIDEO_DECODER_STREAM_LOCK (decoder);
+  state = priv->output_state;
 
   gst_video_decoder_prepare_finish_frame (decoder, frame, FALSE);
   priv->processed++;
