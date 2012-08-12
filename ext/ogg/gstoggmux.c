@@ -543,7 +543,8 @@ gst_ogg_mux_handle_src_event (GstPad * pad, GstEvent * event)
       gst_event_parse_seek (event, NULL, NULL, &flags, NULL, NULL, NULL, NULL);
       if (!ogg_mux->need_headers && (flags & GST_SEEK_FLAG_FLUSH) != 0) {
         /* disable flushing seeks once we started */
-        goto eat;
+        gst_event_unref (event);
+        event = NULL;
       }
       break;
     }
@@ -551,8 +552,9 @@ gst_ogg_mux_handle_src_event (GstPad * pad, GstEvent * event)
       break;
   }
 
-  res = gst_pad_event_default (pad, event);
-eat:
+  if (event != NULL)
+    res = gst_pad_event_default (pad, event);
+
   gst_object_unref (ogg_mux);
   return res;
 }
