@@ -2661,6 +2661,27 @@ gst_video_decoder_get_frame (GstVideoDecoder * decoder, int frame_number)
 }
 
 /**
+ * gst_video_decoder_get_frames:
+ * @decoder: a #GstVideoDecoder
+ *
+ * Get all pending unfinished #GstVideoCodecFrame
+ * 
+ * Returns: (transfer full) (element-type GstVideoCodecFrame): pending unfinished #GstVideoCodecFrame.
+ */
+GList *
+gst_video_decoder_get_frames (GstVideoDecoder * decoder)
+{
+  GList *frames;
+
+  GST_VIDEO_DECODER_STREAM_LOCK (decoder);
+  frames = g_list_copy (decoder->priv->frames);
+  g_list_foreach (frames, (GFunc) gst_video_codec_frame_ref, NULL);
+  GST_VIDEO_DECODER_STREAM_UNLOCK (decoder);
+
+  return frames;
+}
+
+/**
  * gst_video_decoder_set_src_caps:
  * @decoder: a #GstVideoDecoder
  *

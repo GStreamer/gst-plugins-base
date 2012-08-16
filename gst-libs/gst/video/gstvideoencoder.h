@@ -283,6 +283,8 @@ GstVideoCodecFrame*  gst_video_encoder_get_frame        (GstVideoEncoder *encode
 						         int frame_number);
 GstVideoCodecFrame*  gst_video_encoder_get_oldest_frame (GstVideoEncoder *encoder);
 
+GList *              gst_video_encoder_get_frames       (GstVideoEncoder *encoder);
+
 GstFlowReturn        gst_video_encoder_finish_frame (GstVideoEncoder *encoder,
 						     GstVideoCodecFrame *frame);
 
