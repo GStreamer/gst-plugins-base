@@ -2068,7 +2068,8 @@ gst_video_decoder_prepare_finish_frame (GstVideoDecoder *
   }
 
   /* Fix buffers that came in with DTS and were reordered */
-  if (!priv->reordered_input && priv->reordered_output) {
+  if (!priv->reordered_input && priv->reordered_output
+      && GST_CLOCK_TIME_IS_VALID (reorder_pts)) {
     GST_DEBUG_OBJECT (decoder,
         "Correcting PTS, input buffers had DTS on their timestamps");
     frame->pts = reorder_pts;
