@@ -249,10 +249,14 @@ theora_dec_stop (GstVideoDecoder * decoder)
     gst_tag_list_free (dec->tags);
     dec->tags = NULL;
   }
-  if (dec->input_state)
+  if (dec->input_state) {
     gst_video_codec_state_unref (dec->input_state);
-  if (dec->output_state)
+    dec->input_state = NULL;
+  }
+  if (dec->output_state) {
     gst_video_codec_state_unref (dec->output_state);
+    dec->output_state = NULL;
+  }
 
   return TRUE;
 }
