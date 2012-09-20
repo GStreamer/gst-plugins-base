@@ -1190,12 +1190,14 @@ gst_video_decoder_src_eventfunc (GstVideoDecoder * decoder, GstEvent * event)
       priv->proportion = proportion;
       if (G_LIKELY (GST_CLOCK_TIME_IS_VALID (timestamp))) {
         if (G_UNLIKELY (diff > 0)) {
-          if (priv->output_state->info.fps_n > 0)
+          GST_VIDEO_DECODER_STREAM_LOCK (decoder);
+          if (priv->output_state != NULL && priv->output_state->info.fps_n > 0)
             duration =
                 gst_util_uint64_scale (GST_SECOND,
                 priv->output_state->info.fps_d, priv->output_state->info.fps_n);
           else
             duration = 0;
+          GST_VIDEO_DECODER_STREAM_UNLOCK (decoder);
           priv->earliest_time = timestamp + 2 * diff + duration;
         } else {
           priv->earliest_time = timestamp + diff;
@@ -1341,8 +1343,13 @@ gst_video_decoder_src_query (GstPad * pad, GstQuery * query)
       GST_DEBUG_OBJECT (dec, "convert query");
 
       gst_query_parse_convert (query, &src_fmt, &src_val, &dest_fmt, &dest_val);
-      res = gst_video_rawvideo_convert (dec->priv->output_state,
-          src_fmt, src_val, &dest_fmt, &dest_val);
+      GST_VIDEO_DECODER_STREAM_LOCK (dec);
+      if (dec->priv->output_state != NULL)
+        res = gst_video_rawvideo_convert (dec->priv->output_state,
+            src_fmt, src_val, &dest_fmt, &dest_val);
+      else
+        res = FALSE;
+      GST_VIDEO_DECODER_STREAM_UNLOCK (dec);
       if (!res)
         goto error;
       gst_query_set_convert (query, src_fmt, src_val, dest_fmt, dest_val);
@@ -1356,7 +1363,7 @@ gst_video_decoder_src_query (GstPad * pad, GstQuery * query)
       res = gst_pad_peer_query (dec->sinkpad, query);
       if (res) {
         gst_query_parse_latency (query, &live, &min_latency, &max_latency);
-        GST_DEBUG_OBJECT (dec, "Peer latency: live %d, min %"
+        GST_DEBUG_OBJECT (dec, "Peer qlatency: live %d, min %"
             GST_TIME_FORMAT " max %" GST_TIME_FORMAT, live,
             GST_TIME_ARGS (min_latency), GST_TIME_ARGS (max_latency));
 
@@ -2792,16 +2799,27 @@ gst_video_decoder_alloc_output_frame (GstVideoDecoder *
     decoder, GstVideoCodecFrame * frame)
 {
   GstFlowReturn flow_ret;
-  GstVideoCodecState *state = decoder->priv->output_state;
-  int num_bytes = GST_VIDEO_INFO_SIZE (&state->info);
+  GstVideoCodecState *state;
+  int num_bytes;
 
-  g_return_val_if_fail (num_bytes != 0, GST_FLOW_ERROR);
   g_return_val_if_fail (frame->output_buffer == NULL, GST_FLOW_ERROR);
 
+  GST_VIDEO_DECODER_STREAM_LOCK (decoder);
   if (G_UNLIKELY (decoder->priv->output_state_changed))
     gst_video_decoder_set_src_caps (decoder);
 
   g_return_val_if_fail (GST_PAD_CAPS (decoder->srcpad) != NULL, GST_FLOW_ERROR);
+
+  state = decoder->priv->output_state;
+  if (state == NULL) {
+    g_warning ("Output state should be set before allocating frame");
+    goto error;
+  }
+  num_bytes = GST_VIDEO_INFO_SIZE (&state->info);
+  if (num_bytes == 0) {
+    g_warning ("Frame size should not be 0");
+    goto error;
+  }
 
   GST_LOG_OBJECT (decoder, "alloc buffer size %d", num_bytes);
   GST_VIDEO_DECODER_STREAM_LOCK (decoder);
@@ -2819,6 +2837,10 @@ gst_video_decoder_alloc_output_frame (GstVideoDecoder *
   GST_VIDEO_DECODER_STREAM_UNLOCK (decoder);
 
   return flow_ret;
+
+error:
+  GST_VIDEO_DECODER_STREAM_UNLOCK (decoder);
+  return GST_FLOW_ERROR;
 }
 
 /**
