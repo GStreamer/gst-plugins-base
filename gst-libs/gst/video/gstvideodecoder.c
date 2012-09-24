@@ -2836,7 +2836,6 @@ gst_video_decoder_alloc_output_frame (GstVideoDecoder *
   }
 
   GST_LOG_OBJECT (decoder, "alloc buffer size %d", num_bytes);
-  GST_VIDEO_DECODER_STREAM_LOCK (decoder);
 
   flow_ret =
       gst_pad_alloc_buffer_and_set_caps (decoder->srcpad,
