@@ -1105,7 +1105,7 @@ gst_video_encoder_chain (GstPad * pad, GstBuffer * buf)
   }
 
   /* Drop buffers outside of segment */
-  if (!gst_segment_clip (&encoder->output_segment,
+  if (!gst_segment_clip (&encoder->input_segment,
           GST_FORMAT_TIME, start, stop, &cstart, &cstop)) {
     GST_DEBUG_OBJECT (encoder, "clipping to segment dropped frame");
     gst_buffer_unref (buf);
