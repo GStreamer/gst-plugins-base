@@ -2159,6 +2159,8 @@ _gst_audio_decoder_error (GstAudioDecoder * dec, gint weight,
         domain, code, txt, dbg, file, function, line);
     return GST_FLOW_ERROR;
   } else {
+    g_free (txt);
+    g_free (dbg);
     return GST_FLOW_OK;
   }
 }
