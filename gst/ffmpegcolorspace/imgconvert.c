@@ -1555,6 +1555,41 @@ nv12_to_yuv444p (AVPicture * dst, const AVPicture * src, int width, int height)
   }
 }
 
+static void
+nv12_to_yuv420p (AVPicture * dst, const AVPicture * src, int width, int height)
+{
+  uint8_t *src_c = src->data[1];
+  uint8_t *dst_cb = dst->data[1];
+  uint8_t *dst_cr = dst->data[2];
+  int src_c_wrap, dst_cb_wrap, dst_cr_wrap;
+  int c_width, c_height, w, h;
+
+  /* Compute Cb/Cr width and height including odd cases */
+  c_width = width / 2 + (width & 1);
+  c_height = height / 2 + (height & 1);
+
+  /* Compute extra padding per line */
+  src_c_wrap = src->linesize[1] - c_width * 2;
+  dst_cb_wrap = dst->linesize[1] - c_width;
+  dst_cr_wrap = dst->linesize[2] - c_width;
+
+  /* Copy Y plane */
+  memcpy (dst->data[0], src->data[0], src->linesize[0] * height);
+
+  /* Split UY plane to seperate U and V planes */
+  for (h = c_height; h--;) {
+    for (w = c_width; w--;) {
+      *dst_cb++ = *src_c++;
+      *dst_cr++ = *src_c++;
+    }
+
+    /* Skip to next line */
+    src_c += src_c_wrap;
+    dst_cb += dst_cb_wrap;
+    dst_cr += dst_cr_wrap;
+  }
+}
+
 #define nv21_to_nv12 nv12_to_nv21
 
 static void
@@ -1638,6 +1673,41 @@ nv21_to_yuv444p (AVPicture * dst, const AVPicture * src, int width, int height)
       *dst_cb1++ = cb;
       *dst_cr1++ = cr;
     }
+  }
+}
+
+static void
+nv21_to_yuv420p (AVPicture * dst, const AVPicture * src, int width, int height)
+{
+  uint8_t *src_c = src->data[1];
+  uint8_t *dst_cb = dst->data[1];
+  uint8_t *dst_cr = dst->data[2];
+  int src_c_wrap, dst_cb_wrap, dst_cr_wrap;
+  int c_width, c_height, w, h;
+
+  /* Compute Cb/Cr width and height including odd cases */
+  c_width = width / 2 + (width & 1);
+  c_height = height / 2 + (height & 1);
+
+  /* Compute extra padding per line */
+  src_c_wrap = src->linesize[1] - c_width * 2;
+  dst_cb_wrap = dst->linesize[1] - c_width;
+  dst_cr_wrap = dst->linesize[2] - c_width;
+
+  /* Copy Y plane */
+  memcpy (dst->data[0], src->data[0], src->linesize[0] * height);
+
+  /* Split UY plane to seperate U and V planes */
+  for (h = c_height; h--;) {
+    for (w = c_width; w--;) {
+      *dst_cr++ = *src_c++;
+      *dst_cb++ = *src_c++;
+    }
+
+    /* Skip to next line */
+    src_c += src_c_wrap;
+    dst_cb += dst_cb_wrap;
+    dst_cr += dst_cr_wrap;
   }
 }
 
@@ -3125,6 +3195,7 @@ static ConvertEntry convert_table[] = {
   {PIX_FMT_NV12, PIX_FMT_ABGR32, nv12_to_abgr32},
   {PIX_FMT_NV12, PIX_FMT_NV21, nv12_to_nv21},
   {PIX_FMT_NV12, PIX_FMT_YUV444P, nv12_to_yuv444p},
+  {PIX_FMT_NV12, PIX_FMT_YUV420P, nv12_to_yuv420p},
 
   {PIX_FMT_NV21, PIX_FMT_RGB555, nv21_to_rgb555},
   {PIX_FMT_NV21, PIX_FMT_RGB565, nv21_to_rgb565},
@@ -3140,6 +3211,7 @@ static ConvertEntry convert_table[] = {
   {PIX_FMT_NV21, PIX_FMT_ABGR32, nv21_to_abgr32},
   {PIX_FMT_NV21, PIX_FMT_YUV444P, nv21_to_yuv444p},
   {PIX_FMT_NV21, PIX_FMT_NV12, nv21_to_nv12},
+  {PIX_FMT_NV21, PIX_FMT_YUV420P, nv21_to_yuv420p},
 
   {PIX_FMT_YUV422P, PIX_FMT_YUV422, yuv422p_to_yuv422},
   {PIX_FMT_YUV422P, PIX_FMT_UYVY422, yuv422p_to_uyvy422},
