@@ -73,6 +73,12 @@ G_BEGIN_DECLS
  * @GST_VIDEO_FORMAT_ARGB64: rgb with alpha channel first, 16 bits per channel (Since: 0.10.33)
  * @GST_VIDEO_FORMAT_AYUV64: packed 4:4:4 YUV with alpha channel, 16 bits per channel (A0-Y0-U0-V0 ...) (Since: 0.10.33)
  * @GST_VIDEO_FORMAT_r210: packed 4:4:4 RGB, 10 bits per channel (Since: 0.10.33)
+ * @GST_VIDEO_FORMAT_I420_10BE: planar 4:2:0 YUV, 10 bits per channel
+ * @GST_VIDEO_FORMAT_I420_10LE: planar 4:2:0 YUV, 10 bits per channel
+ * @GST_VIDEO_FORMAT_I422_10BE: planar 4:2:2 YUV, 10 bits per channel
+ * @GST_VIDEO_FORMAT_I422_10LE: planar 4:2:2 YUV, 10 bits per channel
+ * @GST_VIDEO_FORMAT_Y444_10BE: planar 4:4:4 YUV, 10 bits per channel
+ * @GST_VIDEO_FORMAT_Y444_10LE: planar 4:4:4 YUV, 10 bits per channel
  *
  * Enum value describing the most common video formats.
  */
@@ -120,7 +126,13 @@ typedef enum {
   GST_VIDEO_FORMAT_ARGB64,
   GST_VIDEO_FORMAT_AYUV64,
   GST_VIDEO_FORMAT_r210,
-  GST_VIDEO_FORMAT_ENCODED
+  GST_VIDEO_FORMAT_ENCODED,
+  GST_VIDEO_FORMAT_I420_10BE,
+  GST_VIDEO_FORMAT_I420_10LE,
+  GST_VIDEO_FORMAT_I422_10BE,
+  GST_VIDEO_FORMAT_I422_10LE,
+  GST_VIDEO_FORMAT_Y444_10BE,
+  GST_VIDEO_FORMAT_Y444_10LE
 } GstVideoFormat;
 
 #define GST_VIDEO_BYTE1_MASK_32  "0xFF000000"
