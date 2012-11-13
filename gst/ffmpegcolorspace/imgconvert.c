@@ -488,7 +488,73 @@ static PixFmtInfo pix_fmt_info[PIX_FMT_NB] = {
         /* .x_chroma_shift = */ 1,
         /* .y_chroma_shift = */ 1,
         /* .depth          = */ 8,
-      }
+      },
+  /* [PIX_FMT_YUV420P10BE] = */ {
+        /* .format         = */ PIX_FMT_YUV420P10BE,
+        /* .name           = */ "yuv420p10be",
+        /* .nb_channels    = */ 3,
+        /* .color_type     = */ FF_COLOR_YUV,
+        /* .pixel_type     = */ FF_PIXEL_PLANAR,
+        /* .is_alpha       = */ 0,
+        /* .x_chroma_shift = */ 1,
+        /* .y_chroma_shift = */ 1,
+        /* .depth          = */ 10,
+      },
+  /* [PIX_FMT_YUV420P10LE] = */ {
+        /* .format         = */ PIX_FMT_YUV420P10LE,
+        /* .name           = */ "yuv420p10le",
+        /* .nb_channels    = */ 3,
+        /* .color_type     = */ FF_COLOR_YUV,
+        /* .pixel_type     = */ FF_PIXEL_PLANAR,
+        /* .is_alpha       = */ 0,
+        /* .x_chroma_shift = */ 1,
+        /* .y_chroma_shift = */ 1,
+        /* .depth          = */ 10,
+      },
+  /* [PIX_FMT_YUV422P10BE] = */ {
+        /* .format         = */ PIX_FMT_YUV422P10BE,
+        /* .name           = */ "yuv422p10be",
+        /* .nb_channels    = */ 3,
+        /* .color_type     = */ FF_COLOR_YUV,
+        /* .pixel_type     = */ FF_PIXEL_PLANAR,
+        /* .is_alpha       = */ 0,
+        /* .x_chroma_shift = */ 1,
+        /* .y_chroma_shift = */ 0,
+        /* .depth          = */ 10,
+      },
+  /* [PIX_FMT_YUV422P10LE] = */ {
+        /* .format         = */ PIX_FMT_YUV422P10LE,
+        /* .name           = */ "yuv422p10le",
+        /* .nb_channels    = */ 3,
+        /* .color_type     = */ FF_COLOR_YUV,
+        /* .pixel_type     = */ FF_PIXEL_PLANAR,
+        /* .is_alpha       = */ 0,
+        /* .x_chroma_shift = */ 1,
+        /* .y_chroma_shift = */ 0,
+        /* .depth          = */ 10,
+      },
+  /* [PIX_FMT_YUV444P10BE] = */ {
+        /* .format         = */ PIX_FMT_YUV444P10BE,
+        /* .name           = */ "yuv444p10be",
+        /* .nb_channels    = */ 3,
+        /* .color_type     = */ FF_COLOR_YUV,
+        /* .pixel_type     = */ FF_PIXEL_PLANAR,
+        /* .is_alpha       = */ 0,
+        /* .x_chroma_shift = */ 0,
+        /* .y_chroma_shift = */ 0,
+        /* .depth          = */ 10,
+      },
+  /* [PIX_FMT_YUV444P10LE] = */ {
+        /* .format         = */ PIX_FMT_YUV444P10LE,
+        /* .name           = */ "yuv444p10le",
+        /* .nb_channels    = */ 3,
+        /* .color_type     = */ FF_COLOR_YUV,
+        /* .pixel_type     = */ FF_PIXEL_PLANAR,
+        /* .is_alpha       = */ 0,
+        /* .x_chroma_shift = */ 0,
+        /* .y_chroma_shift = */ 0,
+        /* .depth          = */ 10,
+      },
 };
 
 /* returns NULL if not found */
@@ -1778,6 +1844,950 @@ yuva420p_to_yuv422 (AVPicture * dst, const AVPicture * src,
       *line1++ = *lum1++;
       *line1++ = *cb1++;
     }
+  }
+}
+
+static void
+yuv420p10be_to_yuv444p (AVPicture * dst, const AVPicture * src, int width,
+    int height)
+{
+  int w, h;
+  uint8_t *dst_lum1, *dst_lum2, *dst_line = dst->data[0];
+  uint8_t *dst_cb1, *dst_cb2, *dst_cb_line = dst->data[1];
+  uint8_t *dst_cr1, *dst_cr2, *dst_cr_line = dst->data[2];
+  uint16_t *lum1, *lum2, *src_lum_line = (uint16_t *) src->data[0];
+  uint16_t *src_cb1, *src_cb_line = (uint16_t *) src->data[1];
+  uint16_t *src_cr1, *src_cr_line = (uint16_t *) src->data[2];
+  uint16_t y1, y2, cb, cr;
+
+  for (h = height / 2; h--;) {
+    dst_lum1 = dst_line;
+    dst_lum2 = dst_line + dst->linesize[0];
+
+    dst_cb1 = dst_cb_line;
+    dst_cb2 = dst_cb_line + dst->linesize[1];
+    dst_cr1 = dst_cr_line;
+    dst_cr2 = dst_cr_line + dst->linesize[2];
+
+    lum1 = src_lum_line;
+    lum2 = src_lum_line + src->linesize[0] / 2;
+
+    src_cb1 = src_cb_line;
+    src_cr1 = src_cr_line;
+
+    for (w = width / 2; w--;) {
+      cb = *src_cb1++;
+      cr = *src_cr1++;
+      y1 = *lum1++;
+      y2 = *lum2++;
+      cb = GUINT16_FROM_BE (cb) >> 6;
+      cr = GUINT16_FROM_BE (cr) >> 6;
+      y1 = GUINT16_FROM_BE (y1) >> 6;
+      y2 = GUINT16_FROM_BE (y2) >> 6;
+
+      *dst_lum1++ = y1;
+      *dst_lum2++ = y2;
+      *dst_cb1++ = *dst_cb2++ = cb;
+      *dst_cr1++ = *dst_cr2++ = cr;
+
+      y1 = *lum1++;
+      y2 = *lum2++;
+      y1 = GUINT16_FROM_BE (y1) >> 6;
+      y2 = GUINT16_FROM_BE (y2) >> 6;
+
+      *dst_lum1++ = y1;
+      *dst_lum2++ = y2;
+      *dst_cb1++ = *dst_cb2++ = cb;
+      *dst_cr1++ = *dst_cr2++ = cr;
+    }
+    /* odd width */
+    if (width % 2 != 0) {
+      cb = *src_cb1++;
+      cr = *src_cr1++;
+      y1 = *lum1++;
+      y2 = *lum2++;
+      cb = GUINT16_FROM_BE (cb) >> 6;
+      cr = GUINT16_FROM_BE (cr) >> 6;
+      y1 = GUINT16_FROM_BE (y1) >> 6;
+      y2 = GUINT16_FROM_BE (y2) >> 6;
+
+      *dst_lum1++ = y1;
+      *dst_lum2++ = y2;
+      *dst_cb1++ = *dst_cb2++ = cb;
+      *dst_cr1++ = *dst_cr2++ = cr;
+    }
+
+    dst_line += dst->linesize[0] * 2;
+    dst_cb_line += dst->linesize[1] * 2;
+    dst_cr_line += dst->linesize[2] * 2;
+    src_lum_line += src->linesize[0];
+    src_cb_line += src->linesize[1] / 2;
+    src_cr_line += src->linesize[2] / 2;
+  }
+
+  /* odd height */
+  if (height % 2 != 0) {
+    dst_lum1 = dst_line;
+    lum1 = src_lum_line;
+    src_cb1 = src_cb_line;
+    src_cr1 = src_cr_line;
+    dst_cb1 = dst_cb_line;
+    dst_cr1 = dst_cr_line;
+
+    for (w = width / 2; w--;) {
+      cb = *src_cb1++;
+      cr = *src_cr1++;
+      y1 = *lum1++;
+      cb = GUINT16_FROM_BE (cb) >> 6;
+      cr = GUINT16_FROM_BE (cr) >> 6;
+      y1 = GUINT16_FROM_BE (y1) >> 6;
+
+      *dst_lum1++ = y1;
+      *dst_cb1++ = cb;
+      *dst_cr1++ = cr;
+
+      y1 = *lum1++;
+      y1 = GUINT16_FROM_BE (y1) >> 6;
+
+      *dst_lum1++ = y1;
+      *dst_cb1++ = cb >> 6;
+      *dst_cr1++ = cr >> 6;
+    }
+    /* odd width */
+    if (width % 2 != 0) {
+      cb = *src_cb1++;
+      cr = *src_cr1++;
+      y1 = *lum1++;
+      cb = GUINT16_FROM_BE (cb) >> 6;
+      cr = GUINT16_FROM_BE (cr) >> 6;
+      y1 = GUINT16_FROM_BE (y1) >> 6;
+      *dst_lum1++ = y1;
+      *dst_cb1++ = cb;
+      *dst_cr1++ = cr;
+    }
+  }
+}
+
+static void
+yuv420p10le_to_yuv444p (AVPicture * dst, const AVPicture * src, int width,
+    int height)
+{
+  int w, h;
+  uint8_t *dst_lum1, *dst_lum2, *dst_line = dst->data[0];
+  uint8_t *dst_cb1, *dst_cb2, *dst_cb_line = dst->data[1];
+  uint8_t *dst_cr1, *dst_cr2, *dst_cr_line = dst->data[2];
+  uint16_t *lum1, *lum2, *src_lum_line = (uint16_t *) src->data[0];
+  uint16_t *src_cb1, *src_cb_line = (uint16_t *) src->data[1];
+  uint16_t *src_cr1, *src_cr_line = (uint16_t *) src->data[2];
+  uint16_t y1, y2, cb, cr;
+
+  for (h = height / 2; h--;) {
+    dst_lum1 = dst_line;
+    dst_lum2 = dst_line + dst->linesize[0];
+
+    dst_cb1 = dst_cb_line;
+    dst_cb2 = dst_cb_line + dst->linesize[1];
+    dst_cr1 = dst_cr_line;
+    dst_cr2 = dst_cr_line + dst->linesize[2];
+
+    lum1 = src_lum_line;
+    lum2 = src_lum_line + src->linesize[0] / 2;
+
+    src_cb1 = src_cb_line;
+    src_cr1 = src_cr_line;
+
+    for (w = width / 2; w--;) {
+      cb = *src_cb1++;
+      cr = *src_cr1++;
+      y1 = *lum1++;
+      y2 = *lum2++;
+      cb = GUINT16_FROM_LE (cb) >> 6;
+      cr = GUINT16_FROM_LE (cr) >> 6;
+      y1 = GUINT16_FROM_LE (y1) >> 6;
+      y2 = GUINT16_FROM_LE (y2) >> 6;
+
+      *dst_lum1++ = y1;
+      *dst_lum2++ = y2;
+      *dst_cb1++ = *dst_cb2++ = cb;
+      *dst_cr1++ = *dst_cr2++ = cr;
+
+      y1 = *lum1++;
+      y2 = *lum2++;
+      y1 = GUINT16_FROM_LE (y1) >> 6;
+      y2 = GUINT16_FROM_LE (y2) >> 6;
+
+      *dst_lum1++ = y1;
+      *dst_lum2++ = y2;
+      *dst_cb1++ = *dst_cb2++ = cb;
+      *dst_cr1++ = *dst_cr2++ = cr;
+    }
+    /* odd width */
+    if (width % 2 != 0) {
+      cb = *src_cb1++;
+      cr = *src_cr1++;
+      y1 = *lum1++;
+      y2 = *lum2++;
+      cb = GUINT16_FROM_LE (cb) >> 6;
+      cr = GUINT16_FROM_LE (cr) >> 6;
+      y1 = GUINT16_FROM_LE (y1) >> 6;
+      y2 = GUINT16_FROM_LE (y2) >> 6;
+
+      *dst_lum1++ = y1;
+      *dst_lum2++ = y2;
+      *dst_cb1++ = *dst_cb2++ = cb;
+      *dst_cr1++ = *dst_cr2++ = cr;
+    }
+
+    dst_line += dst->linesize[0] * 2;
+    dst_cb_line += dst->linesize[1] * 2;
+    dst_cr_line += dst->linesize[2] * 2;
+    src_lum_line += src->linesize[0];
+    src_cb_line += src->linesize[1] / 2;
+    src_cr_line += src->linesize[2] / 2;
+  }
+
+  /* odd height */
+  if (height % 2 != 0) {
+    dst_lum1 = dst_line;
+    lum1 = src_lum_line;
+    src_cb1 = src_cb_line;
+    src_cr1 = src_cr_line;
+    dst_cb1 = dst_cb_line;
+    dst_cr1 = dst_cr_line;
+
+    for (w = width / 2; w--;) {
+      cb = *src_cb1++;
+      cr = *src_cr1++;
+      y1 = *lum1++;
+      cb = GUINT16_FROM_LE (cb) >> 6;
+      cr = GUINT16_FROM_LE (cr) >> 6;
+      y1 = GUINT16_FROM_LE (y1) >> 6;
+
+      *dst_lum1++ = y1;
+      *dst_cb1++ = cb;
+      *dst_cr1++ = cr;
+
+      y1 = *lum1++;
+      y1 = GUINT16_FROM_LE (y1) >> 6;
+
+      *dst_lum1++ = y1;
+      *dst_cb1++ = cb >> 6;
+      *dst_cr1++ = cr >> 6;
+    }
+    /* odd width */
+    if (width % 2 != 0) {
+      cb = *src_cb1++;
+      cr = *src_cr1++;
+      y1 = *lum1++;
+      cb = GUINT16_FROM_LE (cb) >> 6;
+      cr = GUINT16_FROM_LE (cr) >> 6;
+      y1 = GUINT16_FROM_LE (y1) >> 6;
+      *dst_lum1++ = y1;
+      *dst_cb1++ = cb;
+      *dst_cr1++ = cr;
+    }
+  }
+}
+
+static void
+yuv444p_to_yuv420p10be (AVPicture * dst, const AVPicture * src, int width,
+    int height)
+{
+  int w, h;
+  uint16_t *dst_lum1, *dst_lum2, *dst_line = (uint16_t *) dst->data[0];
+  uint16_t *dst_cb1, *dst_cb_line = (uint16_t *) dst->data[1];
+  uint16_t *dst_cr1, *dst_cr_line = (uint16_t *) dst->data[2];
+  uint8_t *lum1, *lum2, *src_lum_line = src->data[0];
+  uint8_t *src_cb1, *src_cb2, *src_cb_line = src->data[1];
+  uint8_t *src_cr1, *src_cr2, *src_cr_line = src->data[2];
+  uint16_t y1, y2, cb, cr;
+
+  for (h = height / 2; h--;) {
+    dst_lum1 = dst_line;
+    dst_lum2 = dst_line + dst->linesize[0] / 2;
+
+    dst_cb1 = dst_cb_line;
+    dst_cr1 = dst_cr_line;
+
+    lum1 = src_lum_line;
+    lum2 = src_lum_line + src->linesize[0];
+
+    src_cb1 = src_cb_line;
+    src_cb2 = src_cb_line + src->linesize[1];
+    src_cr1 = src_cr_line;
+    src_cr2 = src_cr_line + src->linesize[2];
+
+    for (w = width / 2; w--;) {
+      cb = *src_cb1++;
+      cb += *src_cb1++;
+      cb += *src_cb2++;
+      cb += *src_cb2++;
+      cr = *src_cr1++;
+      cr += *src_cr1++;
+      cr += *src_cr2++;
+      cr += *src_cr2++;
+      y1 = *lum1++;
+      y2 = *lum1++;
+      cb = cb << 4;
+      cr = cr << 4;
+      y1 = y1 << 6;
+      y2 = y2 << 6;
+
+      *dst_lum1++ = GUINT16_TO_BE (y1);
+      *dst_lum1++ = GUINT16_TO_BE (y2);
+      *dst_cb1++ = GUINT16_TO_BE (cb);
+      *dst_cr1++ = GUINT16_TO_BE (cr);
+
+      y1 = *lum2++;
+      y2 = *lum2++;
+      y1 = y1 << 6;
+      y2 = y2 << 6;
+
+      *dst_lum2++ = GUINT16_TO_BE (y1);
+      *dst_lum2++ = GUINT16_TO_BE (y2);
+    }
+
+    /* odd width */
+    if (width % 2 != 0) {
+      cb = *src_cb1++;
+      cb += *src_cb2++;
+      cr = *src_cr1++;
+      cr += *src_cr2++;
+      y1 = *lum1++;
+
+      cb = cb << 5;
+      cr = cr << 5;
+      y1 = y1 << 6;
+
+      *dst_lum1++ = GUINT16_TO_BE (y1);
+      *dst_cb1++ = GUINT16_TO_BE (cb);
+      *dst_cr1++ = GUINT16_TO_BE (cr);
+    }
+
+    dst_line += dst->linesize[0];
+    dst_cb_line += dst->linesize[1] / 2;
+    dst_cr_line += dst->linesize[2] / 2;
+    src_lum_line += src->linesize[0] * 2;
+    src_cb_line += src->linesize[1] * 2;
+    src_cr_line += src->linesize[2] * 2;
+  }
+
+  /* odd height */
+  if (height % 2 != 0) {
+    dst_lum1 = dst_line;
+    lum1 = src_lum_line;
+    src_cb1 = src_cb_line;
+    src_cr1 = src_cr_line;
+    dst_cb1 = dst_cb_line;
+    dst_cr1 = dst_cr_line;
+
+    for (w = width / 2; w--;) {
+      cb = *src_cb1++;
+      cb += *src_cb1++;
+      cr = *src_cr1++;
+      cr += *src_cr1++;
+      y1 = *lum1++;
+      y2 = *lum1++;
+      cb = cb << 5;
+      cr = cr << 5;
+      y1 = y1 << 6;
+      y2 = y2 << 6;
+
+      *dst_lum1++ = GUINT16_TO_BE (y1);
+      *dst_lum1++ = GUINT16_TO_BE (y2);
+      *dst_cb1++ = GUINT16_TO_BE (cb);
+      *dst_cr1++ = GUINT16_TO_BE (cr);
+    }
+
+    /* odd width */
+    if (width % 2 != 0) {
+      cb = *src_cb1++;
+      cr = *src_cr1++;
+      y1 = *lum1++;
+
+      cb = cb << 6;
+      cr = cr << 6;
+      y1 = y1 << 6;
+
+      *dst_lum1++ = GUINT16_TO_BE (y1);
+      *dst_cb1++ = GUINT16_TO_BE (cb);
+      *dst_cr1++ = GUINT16_TO_BE (cr);
+    }
+  }
+}
+
+static void
+yuv444p_to_yuv420p10le (AVPicture * dst, const AVPicture * src, int width,
+    int height)
+{
+  int w, h;
+  uint16_t *dst_lum1, *dst_lum2, *dst_line = (uint16_t *) dst->data[0];
+  uint16_t *dst_cb1, *dst_cb_line = (uint16_t *) dst->data[1];
+  uint16_t *dst_cr1, *dst_cr_line = (uint16_t *) dst->data[2];
+  uint8_t *lum1, *lum2, *src_lum_line = src->data[0];
+  uint8_t *src_cb1, *src_cb2, *src_cb_line = src->data[1];
+  uint8_t *src_cr1, *src_cr2, *src_cr_line = src->data[2];
+  uint16_t y1, y2, cb, cr;
+
+  for (h = height / 2; h--;) {
+    dst_lum1 = dst_line;
+    dst_lum2 = dst_line + dst->linesize[0] / 2;
+
+    dst_cb1 = dst_cb_line;
+    dst_cr1 = dst_cr_line;
+
+    lum1 = src_lum_line;
+    lum2 = src_lum_line + src->linesize[0];
+
+    src_cb1 = src_cb_line;
+    src_cb2 = src_cb_line + src->linesize[1];
+    src_cr1 = src_cr_line;
+    src_cr2 = src_cr_line + src->linesize[2];
+
+    for (w = width / 2; w--;) {
+      cb = *src_cb1++;
+      cb += *src_cb1++;
+      cb += *src_cb2++;
+      cb += *src_cb2++;
+      cr = *src_cr1++;
+      cr += *src_cr1++;
+      cr += *src_cr2++;
+      cr += *src_cr2++;
+      y1 = *lum1++;
+      y2 = *lum1++;
+      cb = cb << 4;
+      cr = cr << 4;
+      y1 = y1 << 6;
+      y2 = y2 << 6;
+
+      *dst_lum1++ = GUINT16_TO_LE (y1);
+      *dst_lum1++ = GUINT16_TO_LE (y2);
+      *dst_cb1++ = GUINT16_TO_LE (cb);
+      *dst_cr1++ = GUINT16_TO_LE (cr);
+
+      y1 = *lum2++;
+      y2 = *lum2++;
+      y1 = y1 << 6;
+      y2 = y2 << 6;
+
+      *dst_lum2++ = GUINT16_TO_LE (y1);
+      *dst_lum2++ = GUINT16_TO_LE (y2);
+    }
+
+    /* odd width */
+    if (width % 2 != 0) {
+      cb = *src_cb1++;
+      cb += *src_cb2++;
+      cr = *src_cr1++;
+      cr += *src_cr2++;
+      y1 = *lum1++;
+
+      cb = cb << 5;
+      cr = cr << 5;
+      y1 = y1 << 6;
+
+      *dst_lum1++ = GUINT16_TO_LE (y1);
+      *dst_cb1++ = GUINT16_TO_LE (cb);
+      *dst_cr1++ = GUINT16_TO_LE (cr);
+    }
+
+    dst_line += dst->linesize[0];
+    dst_cb_line += dst->linesize[1] / 2;
+    dst_cr_line += dst->linesize[2] / 2;
+    src_lum_line += src->linesize[0] * 2;
+    src_cb_line += src->linesize[1] * 2;
+    src_cr_line += src->linesize[2] * 2;
+  }
+
+  /* odd height */
+  if (height % 2 != 0) {
+    dst_lum1 = dst_line;
+    lum1 = src_lum_line;
+    src_cb1 = src_cb_line;
+    src_cr1 = src_cr_line;
+    dst_cb1 = dst_cb_line;
+    dst_cr1 = dst_cr_line;
+
+    for (w = width / 2; w--;) {
+      cb = *src_cb1++;
+      cb += *src_cb1++;
+      cr = *src_cr1++;
+      cr += *src_cr1++;
+      y1 = *lum1++;
+      y2 = *lum1++;
+      cb = cb << 5;
+      cr = cr << 5;
+      y1 = y1 << 6;
+      y2 = y2 << 6;
+
+      *dst_lum1++ = GUINT16_TO_LE (y1);
+      *dst_lum1++ = GUINT16_TO_LE (y2);
+      *dst_cb1++ = GUINT16_TO_LE (cb);
+      *dst_cr1++ = GUINT16_TO_LE (cr);
+    }
+
+    /* odd width */
+    if (width % 2 != 0) {
+      cb = *src_cb1++;
+      cr = *src_cr1++;
+      y1 = *lum1++;
+
+      cb = cb << 6;
+      cr = cr << 6;
+      y1 = y1 << 6;
+
+      *dst_lum1++ = GUINT16_TO_LE (y1);
+      *dst_cb1++ = GUINT16_TO_LE (cb);
+      *dst_cr1++ = GUINT16_TO_LE (cr);
+    }
+  }
+}
+
+static void
+yuv422p10be_to_yuv444p (AVPicture * dst, const AVPicture * src, int width,
+    int height)
+{
+  int w, h;
+  uint8_t *dst_lum1, *dst_line = dst->data[0];
+  uint8_t *dst_cb1, *dst_cb_line = dst->data[1];
+  uint8_t *dst_cr1, *dst_cr_line = dst->data[2];
+  uint16_t *lum1, *src_lum_line = (uint16_t *) src->data[0];
+  uint16_t *src_cb1, *src_cb_line = (uint16_t *) src->data[1];
+  uint16_t *src_cr1, *src_cr_line = (uint16_t *) src->data[2];
+  uint16_t y1, cb, cr;
+
+  for (h = height; h--;) {
+    dst_lum1 = dst_line;
+
+    dst_cb1 = dst_cb_line;
+    dst_cr1 = dst_cr_line;
+
+    lum1 = src_lum_line;
+
+    src_cb1 = src_cb_line;
+    src_cr1 = src_cr_line;
+
+    for (w = width / 2; w--;) {
+      cb = *src_cb1++;
+      cr = *src_cr1++;
+      y1 = *lum1++;
+      cb = GUINT16_FROM_BE (cb) >> 6;
+      cr = GUINT16_FROM_BE (cr) >> 6;
+      y1 = GUINT16_FROM_BE (y1) >> 6;
+
+      *dst_lum1++ = y1;
+      *dst_cb1++ = cb;
+      *dst_cr1++ = cr;
+
+      y1 = *lum1++;
+      y1 = GUINT16_FROM_BE (y1) >> 6;
+
+      *dst_lum1++ = y1;
+      *dst_cb1++ = cb;
+      *dst_cr1++ = cr;
+    }
+    /* odd width */
+    if (width % 2 != 0) {
+      cb = *src_cb1++;
+      cr = *src_cr1++;
+      y1 = *lum1++;
+      cb = GUINT16_FROM_BE (cb) >> 6;
+      cr = GUINT16_FROM_BE (cr) >> 6;
+      y1 = GUINT16_FROM_BE (y1) >> 6;
+
+      *dst_lum1++ = y1;
+      *dst_cb1++ = cb;
+      *dst_cr1++ = cr;
+    }
+
+    dst_line += dst->linesize[0];
+    dst_cb_line += dst->linesize[1];
+    dst_cr_line += dst->linesize[2];
+    src_lum_line += src->linesize[0] / 2;
+    src_cb_line += src->linesize[1] / 2;
+    src_cr_line += src->linesize[2] / 2;
+  }
+}
+
+static void
+yuv422p10le_to_yuv444p (AVPicture * dst, const AVPicture * src, int width,
+    int height)
+{
+  int w, h;
+  uint8_t *dst_lum1, *dst_line = dst->data[0];
+  uint8_t *dst_cb1, *dst_cb_line = dst->data[1];
+  uint8_t *dst_cr1, *dst_cr_line = dst->data[2];
+  uint16_t *lum1, *src_lum_line = (uint16_t *) src->data[0];
+  uint16_t *src_cb1, *src_cb_line = (uint16_t *) src->data[1];
+  uint16_t *src_cr1, *src_cr_line = (uint16_t *) src->data[2];
+  uint16_t y1, cb, cr;
+
+  for (h = height; h--;) {
+    dst_lum1 = dst_line;
+
+    dst_cb1 = dst_cb_line;
+    dst_cr1 = dst_cr_line;
+
+    lum1 = src_lum_line;
+
+    src_cb1 = src_cb_line;
+    src_cr1 = src_cr_line;
+
+    for (w = width / 2; w--;) {
+      cb = *src_cb1++;
+      cr = *src_cr1++;
+      y1 = *lum1++;
+      cb = GUINT16_FROM_LE (cb) >> 6;
+      cr = GUINT16_FROM_LE (cr) >> 6;
+      y1 = GUINT16_FROM_LE (y1) >> 6;
+
+      *dst_lum1++ = y1;
+      *dst_cb1++ = cb;
+      *dst_cr1++ = cr;
+
+      y1 = *lum1++;
+      y1 = GUINT16_FROM_LE (y1) >> 6;
+
+      *dst_lum1++ = y1;
+      *dst_cb1++ = cb;
+      *dst_cr1++ = cr;
+    }
+    /* odd width */
+    if (width % 2 != 0) {
+      cb = *src_cb1++;
+      cr = *src_cr1++;
+      y1 = *lum1++;
+      cb = GUINT16_FROM_LE (cb) >> 6;
+      cr = GUINT16_FROM_LE (cr) >> 6;
+      y1 = GUINT16_FROM_LE (y1) >> 6;
+
+      *dst_lum1++ = y1;
+      *dst_cb1++ = cb;
+      *dst_cr1++ = cr;
+    }
+
+    dst_line += dst->linesize[0];
+    dst_cb_line += dst->linesize[1];
+    dst_cr_line += dst->linesize[2];
+    src_lum_line += src->linesize[0] / 2;
+    src_cb_line += src->linesize[1] / 2;
+    src_cr_line += src->linesize[2] / 2;
+  }
+}
+
+static void
+yuv444p_to_yuv422p10be (AVPicture * dst, const AVPicture * src, int width,
+    int height)
+{
+  int w, h;
+  uint16_t *dst_lum1, *dst_line = (uint16_t *) dst->data[0];
+  uint16_t *dst_cb1, *dst_cb_line = (uint16_t *) dst->data[1];
+  uint16_t *dst_cr1, *dst_cr_line = (uint16_t *) dst->data[2];
+  uint8_t *lum1, *src_lum_line = src->data[0];
+  uint8_t *src_cb1, *src_cb_line = src->data[1];
+  uint8_t *src_cr1, *src_cr_line = src->data[2];
+  uint16_t y1, y2, cb, cr;
+
+  for (h = height; h--;) {
+    dst_lum1 = dst_line;
+
+    dst_cb1 = dst_cb_line;
+    dst_cr1 = dst_cr_line;
+
+    lum1 = src_lum_line;
+
+    src_cb1 = src_cb_line;
+    src_cr1 = src_cr_line;
+
+    for (w = width / 2; w--;) {
+      cb = *src_cb1++;
+      cb += *src_cb1++;
+      cr = *src_cr1++;
+      cr += *src_cr1++;
+      y1 = *lum1++;
+      y2 = *lum1++;
+      cb = cb << 5;
+      cr = cr << 5;
+      y1 = y1 << 6;
+      y2 = y2 << 6;
+
+      *dst_lum1++ = GUINT16_TO_BE (y1);
+      *dst_lum1++ = GUINT16_TO_BE (y2);
+      *dst_cb1++ = GUINT16_TO_BE (cb);
+      *dst_cr1++ = GUINT16_TO_BE (cr);
+    }
+
+    /* odd width */
+    if (width % 2 != 0) {
+      cb = *src_cb1++;
+      cr = *src_cr1++;
+      y1 = *lum1++;
+
+      cb = cb << 6;
+      cr = cr << 6;
+      y1 = y1 << 6;
+
+      *dst_lum1++ = GUINT16_TO_BE (y1);
+      *dst_cb1++ = GUINT16_TO_BE (cb);
+      *dst_cr1++ = GUINT16_TO_BE (cr);
+    }
+
+    dst_line += dst->linesize[0] / 2;
+    dst_cb_line += dst->linesize[1] / 2;
+    dst_cr_line += dst->linesize[2] / 2;
+    src_lum_line += src->linesize[0];
+    src_cb_line += src->linesize[1];
+    src_cr_line += src->linesize[2];
+  }
+}
+
+static void
+yuv444p_to_yuv422p10le (AVPicture * dst, const AVPicture * src, int width,
+    int height)
+{
+  int w, h;
+  uint16_t *dst_lum1, *dst_line = (uint16_t *) dst->data[0];
+  uint16_t *dst_cb1, *dst_cb_line = (uint16_t *) dst->data[1];
+  uint16_t *dst_cr1, *dst_cr_line = (uint16_t *) dst->data[2];
+  uint8_t *lum1, *src_lum_line = src->data[0];
+  uint8_t *src_cb1, *src_cb_line = src->data[1];
+  uint8_t *src_cr1, *src_cr_line = src->data[2];
+  uint16_t y1, y2, cb, cr;
+
+  for (h = height; h--;) {
+    dst_lum1 = dst_line;
+
+    dst_cb1 = dst_cb_line;
+    dst_cr1 = dst_cr_line;
+
+    lum1 = src_lum_line;
+
+    src_cb1 = src_cb_line;
+    src_cr1 = src_cr_line;
+
+    for (w = width / 2; w--;) {
+      cb = *src_cb1++;
+      cb += *src_cb1++;
+      cr = *src_cr1++;
+      cr += *src_cr1++;
+      y1 = *lum1++;
+      y2 = *lum1++;
+      cb = cb << 5;
+      cr = cr << 5;
+      y1 = y1 << 6;
+      y2 = y2 << 6;
+
+      *dst_lum1++ = GUINT16_TO_LE (y1);
+      *dst_lum1++ = GUINT16_TO_LE (y2);
+      *dst_cb1++ = GUINT16_TO_LE (cb);
+      *dst_cr1++ = GUINT16_TO_LE (cr);
+    }
+
+    /* odd width */
+    if (width % 2 != 0) {
+      cb = *src_cb1++;
+      cr = *src_cr1++;
+      y1 = *lum1++;
+
+      cb = cb << 6;
+      cr = cr << 6;
+      y1 = y1 << 6;
+
+      *dst_lum1++ = GUINT16_TO_LE (y1);
+      *dst_cb1++ = GUINT16_TO_LE (cb);
+      *dst_cr1++ = GUINT16_TO_LE (cr);
+    }
+
+    dst_line += dst->linesize[0] / 2;
+    dst_cb_line += dst->linesize[1] / 2;
+    dst_cr_line += dst->linesize[2] / 2;
+    src_lum_line += src->linesize[0];
+    src_cb_line += src->linesize[1];
+    src_cr_line += src->linesize[2];
+  }
+}
+
+static void
+yuv444p10be_to_yuv444p (AVPicture * dst, const AVPicture * src, int width,
+    int height)
+{
+  int w, h;
+  uint8_t *dst_lum1, *dst_line = dst->data[0];
+  uint8_t *dst_cb1, *dst_cb_line = dst->data[1];
+  uint8_t *dst_cr1, *dst_cr_line = dst->data[2];
+  uint16_t *lum1, *src_lum_line = (uint16_t *) src->data[0];
+  uint16_t *src_cb1, *src_cb_line = (uint16_t *) src->data[1];
+  uint16_t *src_cr1, *src_cr_line = (uint16_t *) src->data[2];
+  uint16_t y1, cb, cr;
+
+  for (h = height; h--;) {
+    dst_lum1 = dst_line;
+
+    dst_cb1 = dst_cb_line;
+    dst_cr1 = dst_cr_line;
+
+    lum1 = src_lum_line;
+
+    src_cb1 = src_cb_line;
+    src_cr1 = src_cr_line;
+
+    for (w = width; w--;) {
+      cb = *src_cb1++;
+      cr = *src_cr1++;
+      y1 = *lum1++;
+      cb = GUINT16_FROM_BE (cb) >> 6;
+      cr = GUINT16_FROM_BE (cr) >> 6;
+      y1 = GUINT16_FROM_BE (y1) >> 6;
+
+      *dst_lum1++ = y1;
+      *dst_cb1++ = cb;
+      *dst_cr1++ = cr;
+    }
+
+    dst_line += dst->linesize[0];
+    dst_cb_line += dst->linesize[1];
+    dst_cr_line += dst->linesize[2];
+    src_lum_line += src->linesize[0] / 2;
+    src_cb_line += src->linesize[1] / 2;
+    src_cr_line += src->linesize[2] / 2;
+  }
+}
+
+static void
+yuv444p10le_to_yuv444p (AVPicture * dst, const AVPicture * src, int width,
+    int height)
+{
+  int w, h;
+  uint8_t *dst_lum1, *dst_line = dst->data[0];
+  uint8_t *dst_cb1, *dst_cb_line = dst->data[1];
+  uint8_t *dst_cr1, *dst_cr_line = dst->data[2];
+  uint16_t *lum1, *src_lum_line = (uint16_t *) src->data[0];
+  uint16_t *src_cb1, *src_cb_line = (uint16_t *) src->data[1];
+  uint16_t *src_cr1, *src_cr_line = (uint16_t *) src->data[2];
+  uint16_t y1, cb, cr;
+
+  for (h = height; h--;) {
+    dst_lum1 = dst_line;
+
+    dst_cb1 = dst_cb_line;
+    dst_cr1 = dst_cr_line;
+
+    lum1 = src_lum_line;
+
+    src_cb1 = src_cb_line;
+    src_cr1 = src_cr_line;
+
+    for (w = width; w--;) {
+      cb = *src_cb1++;
+      cr = *src_cr1++;
+      y1 = *lum1++;
+      cb = GUINT16_FROM_LE (cb) >> 6;
+      cr = GUINT16_FROM_LE (cr) >> 6;
+      y1 = GUINT16_FROM_LE (y1) >> 6;
+
+      *dst_lum1++ = y1;
+      *dst_cb1++ = cb;
+      *dst_cr1++ = cr;
+    }
+
+    dst_line += dst->linesize[0];
+    dst_cb_line += dst->linesize[1];
+    dst_cr_line += dst->linesize[2];
+    src_lum_line += src->linesize[0] / 2;
+    src_cb_line += src->linesize[1] / 2;
+    src_cr_line += src->linesize[2] / 2;
+  }
+}
+
+static void
+yuv444p_to_yuv444p10be (AVPicture * dst, const AVPicture * src, int width,
+    int height)
+{
+  int w, h;
+  uint16_t *dst_lum1, *dst_line = (uint16_t *) dst->data[0];
+  uint16_t *dst_cb1, *dst_cb_line = (uint16_t *) dst->data[1];
+  uint16_t *dst_cr1, *dst_cr_line = (uint16_t *) dst->data[2];
+  uint8_t *lum1, *src_lum_line = src->data[0];
+  uint8_t *src_cb1, *src_cb_line = src->data[1];
+  uint8_t *src_cr1, *src_cr_line = src->data[2];
+  uint16_t y1, cb, cr;
+
+  for (h = height; h--;) {
+    dst_lum1 = dst_line;
+
+    dst_cb1 = dst_cb_line;
+    dst_cr1 = dst_cr_line;
+
+    lum1 = src_lum_line;
+
+    src_cb1 = src_cb_line;
+    src_cr1 = src_cr_line;
+
+    for (w = width; w--;) {
+      cb = *src_cb1++;
+      cr = *src_cr1++;
+      y1 = *lum1++;
+      cb = cb << 6;
+      cr = cr << 6;
+      y1 = y1 << 6;
+
+      *dst_lum1++ = GUINT16_TO_BE (y1);
+      *dst_cb1++ = GUINT16_TO_BE (cb);
+      *dst_cr1++ = GUINT16_TO_BE (cr);
+    }
+
+    dst_line += dst->linesize[0] / 2;
+    dst_cb_line += dst->linesize[1] / 2;
+    dst_cr_line += dst->linesize[2] / 2;
+    src_lum_line += src->linesize[0];
+    src_cb_line += src->linesize[1];
+    src_cr_line += src->linesize[2];
+  }
+}
+
+static void
+yuv444p_to_yuv444p10le (AVPicture * dst, const AVPicture * src, int width,
+    int height)
+{
+  int w, h;
+  uint16_t *dst_lum1, *dst_line = (uint16_t *) dst->data[0];
+  uint16_t *dst_cb1, *dst_cb_line = (uint16_t *) dst->data[1];
+  uint16_t *dst_cr1, *dst_cr_line = (uint16_t *) dst->data[2];
+  uint8_t *lum1, *src_lum_line = src->data[0];
+  uint8_t *src_cb1, *src_cb_line = src->data[1];
+  uint8_t *src_cr1, *src_cr_line = src->data[2];
+  uint16_t y1, cb, cr;
+
+  for (h = height; h--;) {
+    dst_lum1 = dst_line;
+
+    dst_cb1 = dst_cb_line;
+    dst_cr1 = dst_cr_line;
+
+    lum1 = src_lum_line;
+
+    src_cb1 = src_cb_line;
+    src_cr1 = src_cr_line;
+
+    for (w = width; w--;) {
+      cb = *src_cb1++;
+      cr = *src_cr1++;
+      y1 = *lum1++;
+      cb = cb << 6;
+      cr = cr << 6;
+      y1 = y1 << 6;
+
+      *dst_lum1++ = GUINT16_TO_LE (y1);
+      *dst_cb1++ = GUINT16_TO_LE (cb);
+      *dst_cr1++ = GUINT16_TO_LE (cr);
+    }
+
+    dst_line += dst->linesize[0] / 2;
+    dst_cb_line += dst->linesize[1] / 2;
+    dst_cr_line += dst->linesize[2] / 2;
+    src_lum_line += src->linesize[0];
+    src_cb_line += src->linesize[1];
+    src_cr_line += src->linesize[2];
   }
 }
 
@@ -3571,6 +4581,20 @@ static ConvertEntry convert_table[] = {
   {PIX_FMT_YUVA420P, PIX_FMT_BGRA32, yuva420p_to_bgra32},
   {PIX_FMT_YUVA420P, PIX_FMT_ARGB32, yuva420p_to_argb32},
   {PIX_FMT_YUVA420P, PIX_FMT_ABGR32, yuva420p_to_abgr32},
+
+  {PIX_FMT_YUV420P10BE, PIX_FMT_YUV444P, yuv420p10be_to_yuv444p},
+  {PIX_FMT_YUV420P10LE, PIX_FMT_YUV444P, yuv420p10le_to_yuv444p},
+  {PIX_FMT_YUV422P10BE, PIX_FMT_YUV444P, yuv422p10be_to_yuv444p},
+  {PIX_FMT_YUV422P10LE, PIX_FMT_YUV444P, yuv422p10le_to_yuv444p},
+  {PIX_FMT_YUV444P10BE, PIX_FMT_YUV444P, yuv444p10be_to_yuv444p},
+  {PIX_FMT_YUV444P10LE, PIX_FMT_YUV444P, yuv444p10le_to_yuv444p},
+
+  {PIX_FMT_YUV444P, PIX_FMT_YUV420P10BE, yuv444p_to_yuv420p10be},
+  {PIX_FMT_YUV444P, PIX_FMT_YUV420P10LE, yuv444p_to_yuv420p10le},
+  {PIX_FMT_YUV444P, PIX_FMT_YUV422P10BE, yuv444p_to_yuv422p10be},
+  {PIX_FMT_YUV444P, PIX_FMT_YUV422P10LE, yuv444p_to_yuv422p10le},
+  {PIX_FMT_YUV444P, PIX_FMT_YUV444P10BE, yuv444p_to_yuv444p10be},
+  {PIX_FMT_YUV444P, PIX_FMT_YUV444P10LE, yuv444p_to_yuv444p10le},
 };
 
 static ConvertEntry *

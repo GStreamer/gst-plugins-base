@@ -404,6 +404,24 @@ gst_ffmpeg_pixfmt_to_caps (enum PixelFormat pix_fmt, AVCodecContext * context)
           "bpp", G_TYPE_INT, bpp, "depth", G_TYPE_INT, depth,
           "endianness", G_TYPE_INT, G_BIG_ENDIAN, NULL);
       break;
+    case PIX_FMT_YUV420P10BE:
+      fmt = GST_MAKE_FOURCC ('D', '4', '2', '0');
+      break;
+    case PIX_FMT_YUV420P10LE:
+      fmt = GST_MAKE_FOURCC ('d', '4', '2', '0');
+      break;
+    case PIX_FMT_YUV422P10BE:
+      fmt = GST_MAKE_FOURCC ('D', '4', '2', '2');
+      break;
+    case PIX_FMT_YUV422P10LE:
+      fmt = GST_MAKE_FOURCC ('d', '4', '2', '2');
+      break;
+    case PIX_FMT_YUV444P10BE:
+      fmt = GST_MAKE_FOURCC ('D', '4', '4', '4');
+      break;
+    case PIX_FMT_YUV444P10LE:
+      fmt = GST_MAKE_FOURCC ('d', '4', '4', '4');
+      break;
     default:
       /* give up ... */
       break;
@@ -679,6 +697,24 @@ gst_ffmpeg_caps_to_pixfmt (const GstCaps * caps,
           break;
         case GST_MAKE_FOURCC ('Y', '1', '6', ' '):
           context->pix_fmt = PIX_FMT_Y16;
+          break;
+        case GST_MAKE_FOURCC ('D', '4', '2', '0'):
+          context->pix_fmt = PIX_FMT_YUV420P10BE;
+          break;
+        case GST_MAKE_FOURCC ('d', '4', '2', '0'):
+          context->pix_fmt = PIX_FMT_YUV420P10LE;
+          break;
+        case GST_MAKE_FOURCC ('D', '4', '2', '2'):
+          context->pix_fmt = PIX_FMT_YUV422P10BE;
+          break;
+        case GST_MAKE_FOURCC ('d', '4', '2', '2'):
+          context->pix_fmt = PIX_FMT_YUV422P10LE;
+          break;
+        case GST_MAKE_FOURCC ('D', '4', '4', '4'):
+          context->pix_fmt = PIX_FMT_YUV444P10BE;
+          break;
+        case GST_MAKE_FOURCC ('d', '4', '4', '4'):
+          context->pix_fmt = PIX_FMT_YUV444P10LE;
           break;
       }
     }
@@ -1004,6 +1040,28 @@ gst_ffmpegcsp_avpicture_fill (AVPicture * picture,
       picture->linesize[0] = stride;
       picture->linesize[1] = 4;
       return size + 256 * 4;
+
+    case PIX_FMT_YUV420P10BE:
+    case PIX_FMT_YUV420P10LE:
+    case PIX_FMT_YUV422P10BE:
+    case PIX_FMT_YUV422P10LE:
+    case PIX_FMT_YUV444P10BE:
+    case PIX_FMT_YUV444P10LE:
+      stride = GST_ROUND_UP_4 (width * 2);
+      h2 = ROUND_UP_X (height, pinfo->y_chroma_shift);
+      size = stride * h2;
+      w2 = DIV_ROUND_UP_X (width, pinfo->x_chroma_shift);
+      stride2 = GST_ROUND_UP_4 (w2 * 2);
+      h2 = DIV_ROUND_UP_X (height, pinfo->y_chroma_shift);
+      size2 = stride2 * h2;
+      picture->data[0] = ptr;
+      picture->data[1] = picture->data[0] + size;
+      picture->data[2] = picture->data[1] + size2;
+      picture->linesize[0] = stride;
+      picture->linesize[1] = stride2;
+      picture->linesize[2] = stride2;
+      return size + 2 * size2;
+
     default:
       picture->data[0] = NULL;
       picture->data[1] = NULL;
