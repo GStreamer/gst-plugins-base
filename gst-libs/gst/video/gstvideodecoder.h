@@ -358,8 +358,7 @@ GstVideoCodecState *gst_video_decoder_get_output_state (GstVideoDecoder *decoder
 GstClockTimeDiff gst_video_decoder_get_max_decode_time (GstVideoDecoder *decoder,
 							GstVideoCodecFrame *frame);
 
-gboolean         gst_video_decoder_get_qos_proportion (GstVideoDecoder * decoder,
-                                                       gdouble         * proportion);
+gdouble          gst_video_decoder_get_qos_proportion (GstVideoDecoder * decoder);
 
 GstFlowReturn    gst_video_decoder_finish_frame (GstVideoDecoder *decoder,
 						 GstVideoCodecFrame *frame);
