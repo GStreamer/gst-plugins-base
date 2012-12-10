@@ -1611,7 +1611,7 @@ gst_video_decoder_chain_forward (GstVideoDecoder * decoder,
   if (priv->current_frame == NULL)
     priv->current_frame = gst_video_decoder_new_frame (decoder);
 
-  if (GST_BUFFER_TIMESTAMP_IS_VALID (buf)) {
+  if (GST_BUFFER_TIMESTAMP_IS_VALID (buf) && !priv->packetized) {
     gst_video_decoder_add_timestamp (decoder, buf);
   }
   priv->input_offset += GST_BUFFER_SIZE (buf);
