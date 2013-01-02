@@ -438,6 +438,9 @@ static GstFlowReturn gst_video_decoder_flush_parse (GstVideoDecoder * dec,
 
 static void gst_video_decoder_clear_queues (GstVideoDecoder * dec);
 
+static GstFlowReturn gst_video_decoder_parse_available (GstVideoDecoder * dec,
+    gboolean at_eos);
+
 GST_BOILERPLATE (GstVideoDecoder, gst_video_decoder,
     GstElement, GST_TYPE_ELEMENT);
 
@@ -818,7 +821,33 @@ gst_video_decoder_flush (GstVideoDecoder * dec, gboolean hard)
 }
 
 static GstFlowReturn
-gst_video_decoder_handle_eos (GstVideoDecoder * dec)
+gst_video_decoder_parse_available (GstVideoDecoder * dec, gboolean at_eos)
+{
+  GstVideoDecoderClass *decoder_class = GST_VIDEO_DECODER_GET_CLASS (dec);
+  GstVideoDecoderPrivate *priv = dec->priv;
+  GstFlowReturn ret = GST_FLOW_OK;
+  gsize start_size, available;
+
+  available = gst_adapter_available (priv->input_adapter);
+  start_size = 0;
+
+  while (ret == GST_FLOW_OK && available && start_size != available) {
+    /* current frame may have been parsed and handled,
+     * so we need to set up a new one when asking subclass to parse */
+    if (priv->current_frame == NULL)
+      priv->current_frame = gst_video_decoder_new_frame (dec);
+
+    start_size = available;
+    ret = decoder_class->parse (dec, priv->current_frame,
+        priv->input_adapter, at_eos);
+    available = gst_adapter_available (priv->input_adapter);
+  }
+
+  return ret;
+}
+
+static GstFlowReturn
+gst_video_decoder_drain_out (GstVideoDecoder * dec, gboolean at_eos)
 {
   GstVideoDecoderClass *decoder_class = GST_VIDEO_DECODER_GET_CLASS (dec);
   GstVideoDecoderPrivate *priv = dec->priv;
@@ -830,23 +859,17 @@ gst_video_decoder_handle_eos (GstVideoDecoder * dec)
     /* Forward mode, if unpacketized, give the child class
      * a final chance to flush out packets */
     if (!priv->packetized) {
-      while (ret == GST_FLOW_OK && gst_adapter_available (priv->input_adapter)) {
-        if (priv->current_frame == NULL)
-          priv->current_frame = gst_video_decoder_new_frame (dec);
-
-        ret = decoder_class->parse (dec, priv->current_frame,
-            priv->input_adapter, TRUE);
-      }
+      ret = gst_video_decoder_parse_available (dec, TRUE);
     }
   } else {
     /* Reverse playback mode */
     ret = gst_video_decoder_flush_parse (dec, TRUE);
   }
 
-  ret = GST_FLOW_OK;
-
-  if (decoder_class->finish)
-    ret = decoder_class->finish (dec);
+  if (at_eos) {
+    if (decoder_class->finish)
+      ret = decoder_class->finish (dec);
+  }
 
   GST_VIDEO_DECODER_STREAM_UNLOCK (dec);
 
@@ -866,7 +889,7 @@ gst_video_decoder_sink_eventfunc (GstVideoDecoder * decoder, GstEvent * event)
     {
       GstFlowReturn flow_ret = GST_FLOW_OK;
 
-      flow_ret = gst_video_decoder_handle_eos (decoder);
+      flow_ret = gst_video_decoder_drain_out (decoder, TRUE);
       handled = (flow_ret == GST_VIDEO_DECODER_FLOW_DROPPED);
 
       break;
@@ -1631,24 +1654,11 @@ gst_video_decoder_chain_forward (GstVideoDecoder * decoder,
     }
     priv->current_frame = NULL;
   } else {
-
     gst_adapter_push (priv->input_adapter, buf);
 
-    if (G_UNLIKELY (!gst_adapter_available (priv->input_adapter)))
-      goto beach;
-
-    do {
-      /* current frame may have been parsed and handled,
-       * so we need to set up a new one when asking subclass to parse */
-      if (priv->current_frame == NULL)
-        priv->current_frame = gst_video_decoder_new_frame (decoder);
-
-      ret = klass->parse (decoder, priv->current_frame,
-          priv->input_adapter, at_eos);
-    } while (ret == GST_FLOW_OK && gst_adapter_available (priv->input_adapter));
+    ret = gst_video_decoder_parse_available (decoder, at_eos);
   }
 
-beach:
   if (ret == GST_VIDEO_DECODER_FLOW_NEED_DATA)
     return GST_FLOW_OK;
 
