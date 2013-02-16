@@ -340,7 +340,7 @@ static GstAudioFormatInfo formats[] = {
 static GstAudioFormat
 gst_audio_format_from_caps_structure (const GstStructure * s)
 {
-  gint endianness, width, depth;
+  gint endianness = 0, width, depth;
   guint i;
 
   if (gst_structure_has_name (s, "audio/x-raw-int")) {
@@ -349,14 +349,14 @@ gst_audio_format_from_caps_structure (const GstStructure * s)
     if (!gst_structure_get_boolean (s, "signed", &sign))
       goto missing_field_signed;
 
-    if (!gst_structure_get_int (s, "endianness", &endianness))
-      goto missing_field_endianness;
-
     if (!gst_structure_get_int (s, "width", &width))
       goto missing_field_width;
 
     if (!gst_structure_get_int (s, "depth", &depth))
       goto missing_field_depth;
+
+    if (width > 8 && !gst_structure_get_int (s, "endianness", &endianness))
+      goto missing_field_endianness;
 
     for (i = 0; i < G_N_ELEMENTS (formats); i++) {
       if (GST_AUDIO_FORMAT_INFO_IS_INTEGER (&formats[i]) &&

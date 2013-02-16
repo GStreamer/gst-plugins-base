@@ -524,6 +524,41 @@ GST_START_TEST (test_channel_layout_value_intersect)
 
 GST_END_TEST;
 
+GST_START_TEST (test_format_from_caps)
+{
+  GstAudioInfo info = { NULL, };
+  GstCaps *caps;
+
+  caps = gst_caps_from_string ("audio/x-raw-int, "
+      "signed=(boolean)true, rate=(int)44100, channels=(int)2, "
+      "width=(int)8, depth=(int)8");
+  fail_unless (gst_audio_info_from_caps (&info, caps));
+  fail_unless_equals_int (GST_AUDIO_INFO_FORMAT (&info), GST_AUDIO_FORMAT_S8);
+  fail_unless_equals_int (GST_AUDIO_INFO_WIDTH (&info), 8);
+  fail_unless_equals_int (GST_AUDIO_INFO_DEPTH (&info), 8);
+  fail_unless_equals_int (GST_AUDIO_INFO_BPF (&info), sizeof (guint8) * 2);
+  fail_unless_equals_int (GST_AUDIO_INFO_RATE (&info), 44100);
+  fail_unless_equals_int (GST_AUDIO_INFO_CHANNELS (&info), 2);
+  fail_unless_equals_int (GST_AUDIO_INFO_ENDIANNESS (&info), 0);
+  gst_caps_unref (caps);
+
+  /* superfluous endianess field should not break stuff */
+  caps = gst_caps_from_string ("audio/x-raw-int, endianness=(int)1234, "
+      "signed=(boolean)false, rate=(int)44100, channels=(int)2, "
+      "width=(int)8, depth=(int)8");
+  fail_unless (gst_audio_info_from_caps (&info, caps));
+  fail_unless_equals_int (GST_AUDIO_INFO_FORMAT (&info), GST_AUDIO_FORMAT_U8);
+  fail_unless_equals_int (GST_AUDIO_INFO_WIDTH (&info), 8);
+  fail_unless_equals_int (GST_AUDIO_INFO_DEPTH (&info), 8);
+  fail_unless_equals_int (GST_AUDIO_INFO_BPF (&info), sizeof (guint8) * 2);
+  fail_unless_equals_int (GST_AUDIO_INFO_RATE (&info), 44100);
+  fail_unless_equals_int (GST_AUDIO_INFO_CHANNELS (&info), 2);
+  fail_unless_equals_int (GST_AUDIO_INFO_ENDIANNESS (&info), 0);
+  gst_caps_unref (caps);
+}
+
+GST_END_TEST;
+
 static Suite *
 audio_suite (void)
 {
@@ -536,6 +571,7 @@ audio_suite (void)
   tcase_add_test (tc_chain, test_buffer_clipping_time);
   tcase_add_test (tc_chain, test_buffer_clipping_samples);
   tcase_add_test (tc_chain, test_channel_layout_value_intersect);
+  tcase_add_test (tc_chain, test_format_from_caps);
 
   return s;
 }
