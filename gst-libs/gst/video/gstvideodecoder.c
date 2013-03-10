@@ -1087,9 +1087,9 @@ gst_video_decoder_do_byte (GstVideoDecoder * dec)
 static gboolean
 gst_video_decoder_do_seek (GstVideoDecoder * dec, GstEvent * event)
 {
+  GstFormat format;
   GstSeekFlags flags;
   GstSeekType start_type, end_type;
-  GstFormat format;
   gdouble rate;
   gint64 start, start_time, end_time;
   GstSegment seek_segment;
@@ -2525,6 +2525,8 @@ gst_video_decoder_decode_frame (GstVideoDecoder * decoder,
   GST_LOG_OBJECT (decoder, "pts %" GST_TIME_FORMAT, GST_TIME_ARGS (frame->pts));
   GST_LOG_OBJECT (decoder, "dts %" GST_TIME_FORMAT, GST_TIME_ARGS (frame->dts));
   GST_LOG_OBJECT (decoder, "dist %d", frame->distance_from_sync);
+
+  gst_video_codec_frame_ref (frame);
   priv->frames = g_list_append (priv->frames, frame);
 
   if (g_list_length (priv->frames) > 10) {
@@ -2548,7 +2550,6 @@ gst_video_decoder_decode_frame (GstVideoDecoder * decoder,
   priv->reorder_idx_in = (priv->reorder_idx_in + 1) % MAX_DTS_PTS_REORDER_DEPTH;
 
   /* do something with frame */
-  gst_video_codec_frame_ref (frame);
   ret = decoder_class->handle_frame (decoder, frame);
   if (ret != GST_FLOW_OK)
     GST_DEBUG_OBJECT (decoder, "flow error %s", gst_flow_get_name (ret));
@@ -2694,8 +2695,7 @@ gst_video_decoder_get_frame (GstVideoDecoder * decoder, int frame_number)
     GstVideoCodecFrame *tmp = g->data;
 
     if (tmp->system_frame_number == frame_number) {
-      frame = tmp;
-      gst_video_codec_frame_ref (frame);
+      frame = gst_video_codec_frame_ref (tmp);
       break;
     }
   }
@@ -2836,10 +2836,6 @@ gst_video_decoder_alloc_output_frame (GstVideoDecoder *
   g_return_val_if_fail (frame->output_buffer == NULL, GST_FLOW_ERROR);
 
   GST_VIDEO_DECODER_STREAM_LOCK (decoder);
-  if (G_UNLIKELY (decoder->priv->output_state_changed))
-    gst_video_decoder_negotiate (decoder);
-
-  g_return_val_if_fail (GST_PAD_CAPS (decoder->srcpad) != NULL, GST_FLOW_ERROR);
 
   state = decoder->priv->output_state;
   if (state == NULL) {
@@ -2851,6 +2847,11 @@ gst_video_decoder_alloc_output_frame (GstVideoDecoder *
     g_warning ("Frame size should not be 0");
     goto error;
   }
+
+  if (G_UNLIKELY (decoder->priv->output_state_changed))
+    gst_video_decoder_negotiate (decoder);
+
+  g_return_val_if_fail (GST_PAD_CAPS (decoder->srcpad) != NULL, GST_FLOW_ERROR);
 
   GST_LOG_OBJECT (decoder, "alloc buffer size %d", num_bytes);
 
