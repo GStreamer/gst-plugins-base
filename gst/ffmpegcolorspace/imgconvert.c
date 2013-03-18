@@ -2476,6 +2476,67 @@ yuv422p10le_to_yuv444p (AVPicture * dst, const AVPicture * src, int width,
 }
 
 static void
+yuv422p10le_to_yuv422 (AVPicture * dst, const AVPicture * src, int width,
+    int height)
+{
+  int w, h;
+  uint8_t *dst_pix, *dst_line = dst->data[0];
+  uint16_t *lum1, *src_lum_line = (uint16_t *) src->data[0];
+  uint16_t *src_cb1, *src_cb_line = (uint16_t *) src->data[1];
+  uint16_t *src_cr1, *src_cr_line = (uint16_t *) src->data[2];
+  uint16_t y1, y2, cb, cr;
+
+  g_debug ("h: %d w: %d src ln0: %d ln1: %d ln2: %d dst ln0: %d",
+      height, width, src->linesize[0], src->linesize[1], src->linesize[2],
+      dst->linesize[0]);
+
+  for (h = height; h--;) {
+    dst_pix = dst_line;
+
+    lum1 = src_lum_line;
+
+    src_cb1 = src_cb_line;
+    src_cr1 = src_cr_line;
+
+    for (w = width / 2; w--;) {
+      cb = *src_cb1++;
+      cr = *src_cr1++;
+      y1 = *lum1++;
+      y2 = *lum1++;
+
+      cb = GUINT16_FROM_LE (cb) >> 2;
+      cr = GUINT16_FROM_LE (cr) >> 2;
+      y1 = GUINT16_FROM_LE (y1) >> 2;
+      y2 = GUINT16_FROM_LE (y2) >> 2;
+
+      *dst_pix++ = y1;
+      *dst_pix++ = cb;
+      *dst_pix++ = y2;
+      *dst_pix++ = cr;
+    }
+    /* odd width */
+    if (width % 2 != 0) {
+      cb = *src_cb1++;
+      cr = *src_cr1++;
+      y1 = *lum1++;
+      cb = GUINT16_FROM_LE (cb) >> 2;
+      cr = GUINT16_FROM_LE (cr) >> 2;
+      y1 = GUINT16_FROM_LE (y1) >> 2;
+
+      *dst_pix++ = y1;
+      *dst_pix++ = cb;
+      *dst_pix++ = y1;
+      *dst_pix++ = cr;
+    }
+
+    src_lum_line += src->linesize[0] / 2;
+    src_cb_line += src->linesize[1] / 2;
+    src_cr_line += src->linesize[2] / 2;
+    dst_line += dst->linesize[0];
+  }
+}
+
+static void
 yuv444p_to_yuv422p10be (AVPicture * dst, const AVPicture * src, int width,
     int height)
 {
@@ -4590,6 +4651,7 @@ static ConvertEntry convert_table[] = {
   {PIX_FMT_YUV420P10BE, PIX_FMT_YUV444P, yuv420p10be_to_yuv444p},
   {PIX_FMT_YUV420P10LE, PIX_FMT_YUV444P, yuv420p10le_to_yuv444p},
   {PIX_FMT_YUV422P10BE, PIX_FMT_YUV444P, yuv422p10be_to_yuv444p},
+  {PIX_FMT_YUV422P10LE, PIX_FMT_YUV422, yuv422p10le_to_yuv422},
   {PIX_FMT_YUV422P10LE, PIX_FMT_YUV444P, yuv422p10le_to_yuv444p},
   {PIX_FMT_YUV444P10BE, PIX_FMT_YUV444P, yuv444p10be_to_yuv444p},
   {PIX_FMT_YUV444P10LE, PIX_FMT_YUV444P, yuv444p10le_to_yuv444p},
