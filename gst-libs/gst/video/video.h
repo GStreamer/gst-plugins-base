@@ -356,9 +356,9 @@ typedef enum {
  */
 #define GST_VIDEO_CAPS_RGB8_PALETTED \
   "video/x-raw-rgb, bpp = (int)8, depth = (int)8, "                     \
-      "width = "GST_VIDEO_SIZE_RANGE" , "		                \
+      "width = " GST_VIDEO_SIZE_RANGE " , "		                \
       "height = " GST_VIDEO_SIZE_RANGE ", "                             \
-      "framerate = "GST_VIDEO_FPS_RANGE
+      "framerate = " GST_VIDEO_FPS_RANGE
 
 /**
  * GST_VIDEO_CAPS_YUV:
