@@ -2388,7 +2388,7 @@ h263_video_type_find (GstTypeFind * tf, gpointer unused)
 /*** video/x-h264 H264 elementary video stream ***/
 
 static GstStaticCaps h264_video_caps =
-GST_STATIC_CAPS ("video/x-h264,stream-format=byte-stream");
+GST_STATIC_CAPS ("video/x-h264,stream-format=byte-stream,parsed=(bool)false");
 
 #define H264_VIDEO_CAPS gst_static_caps_get(&h264_video_caps)
 
