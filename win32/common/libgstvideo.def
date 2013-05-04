@@ -36,6 +36,7 @@ EXPORTS
 	gst_video_decoder_get_qos_proportion
 	gst_video_decoder_get_type
 	gst_video_decoder_have_frame
+	gst_video_decoder_negotiate
 	gst_video_decoder_set_estimate_rate
 	gst_video_decoder_set_latency
 	gst_video_decoder_set_max_errors
