@@ -154,8 +154,14 @@ gst_stream_combiner_sink_setcaps (GstPad * pad, GstCaps * caps)
     GST_DEBUG_OBJECT (peer, "Setting caps");
     res = gst_pad_set_caps (peer, caps);
     gst_object_unref (peer);
+
+    STREAMS_LOCK (stream_combiner);
+    if (res)
+      stream_combiner->current = pad;
+    STREAMS_UNLOCK (stream_combiner);
   } else
     GST_WARNING_OBJECT (stream_combiner, "sourcepad has no peer !");
+
   return res;
 }
 
