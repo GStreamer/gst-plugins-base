@@ -287,6 +287,9 @@ static void type_found (GstElement * typefind, guint probability,
 static void decodebin_set_queue_size (GstDecodeBin * dbin,
     GstElement * multiqueue, gboolean preroll, gboolean seekable,
     gboolean adaptive_streaming);
+static void decodebin_set_queue_size_full (GstDecodeBin * dbin,
+    GstElement * multiqueue, gboolean use_buffering, gboolean preroll,
+    gboolean seekable, gboolean adaptive_streaming);
 
 static gboolean gst_decode_bin_autoplug_continue (GstElement * element,
     GstPad * pad, GstCaps * caps);
@@ -3174,18 +3177,28 @@ gst_decode_group_hide (GstDecodeGroup * group)
   gst_decode_group_free_internal (group, TRUE);
 }
 
-/* configure queue sizes, this depends on the buffering method and if we are
- * playing or prerolling. */
 static void
 decodebin_set_queue_size (GstDecodeBin * dbin, GstElement * multiqueue,
     gboolean preroll, gboolean seekable, gboolean adaptive_streaming)
 {
-  guint max_bytes, max_buffers;
-  guint64 max_time;
   gboolean use_buffering;
 
   /* get the current config from the multiqueue */
   g_object_get (multiqueue, "use-buffering", &use_buffering, NULL);
+
+  decodebin_set_queue_size_full (dbin, multiqueue, use_buffering, preroll,
+      seekable, adaptive_streaming);
+}
+
+/* configure queue sizes, this depends on the buffering method and if we are
+ * playing or prerolling. */
+static void
+decodebin_set_queue_size_full (GstDecodeBin * dbin, GstElement * multiqueue,
+    gboolean use_buffering, gboolean preroll, gboolean seekable,
+    gboolean adaptive_streaming)
+{
+  guint max_bytes, max_buffers;
+  guint64 max_time;
 
   GST_DEBUG_OBJECT (multiqueue, "use buffering %d", use_buffering);
 
@@ -3272,7 +3285,7 @@ gst_decode_group_new (GstDecodeBin * dbin, GstDecodeChain * parent)
       gst_object_unref (pad);
     }
   }
-  decodebin_set_queue_size (dbin, mq, TRUE, seekable,
+  decodebin_set_queue_size_full (dbin, mq, FALSE, TRUE, seekable,
       (parent ? parent->adaptive_demuxer : FALSE));
 
   group->overrunsig = g_signal_connect (mq, "overrun",
@@ -3679,6 +3692,10 @@ gst_decode_group_reset_buffering (GstDecodeGroup * group)
     CHAIN_MUTEX_UNLOCK (chain);
   }
 
+  decodebin_set_queue_size_full (group->dbin, group->multiqueue, !ret,
+      FALSE, (group->parent ? group->parent->seekable : TRUE),
+      (group->parent ? group->parent->adaptive_demuxer : FALSE));
+
   if (ret) {
     /* all chains are buffering already, no need to do it here */
     g_object_set (group->multiqueue, "use-buffering", FALSE, NULL);
@@ -3687,9 +3704,6 @@ gst_decode_group_reset_buffering (GstDecodeGroup * group)
         "low-percent", group->dbin->low_percent,
         "high-percent", group->dbin->high_percent, NULL);
   }
-  decodebin_set_queue_size (group->dbin, group->multiqueue, FALSE,
-      (group->parent ? group->parent->seekable : TRUE),
-      (group->parent ? group->parent->adaptive_demuxer : FALSE));
 
   GST_DEBUG_OBJECT (group->dbin, "Setting %s buffering to %d",
       GST_ELEMENT_NAME (group->multiqueue), !ret);
