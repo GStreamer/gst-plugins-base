@@ -61,6 +61,10 @@ contains a set of codecs plugins based on libav (formerly gst-ffmpeg)
 
 Bugs fixed in this release
      
+      * 761257 : multisocketsink: doesn't handle client close and EWOULDBLOCK
+      * 762239 : matroskademux: Assertions about unmappable memory when demuxing wavpack streams
+      * 762710 : gst_discoverer_info_copy loses some data members of the source GstDiscovererInfo object.
+      * 764020 : adaptivedemux: Deadlock on HLS and DASH streams when scrub seeking
       * 693263 : typefinding: MPEG-2 video ES detected as H.263
 
 ==== Download ====
