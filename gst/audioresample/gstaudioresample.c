@@ -1056,6 +1056,11 @@ gst_audio_resample_process (GstAudioResample * resample, GstBuffer * inbuf,
       else
         out_processed = 0;
 
+      /* take care that out_processed is not greater then out_len */
+      if (out_processed > out_len) {
+        out_processed = out_len;
+      }
+
       memset (out_map.data, 0, out_map.size);
       GST_BUFFER_FLAG_SET (outbuf, GST_BUFFER_FLAG_GAP);
       resample->num_gap_samples += in_len;
