@@ -1191,28 +1191,27 @@ static gboolean
 get_functions (GstVideoScaler * hscale, GstVideoScaler * vscale,
     GstVideoFormat format,
     GstVideoScalerHFunc * hfunc, GstVideoScalerVFunc * vfunc,
-    gint * n_elems, guint * width)
+    gint * n_elems, guint * width, gint * bits)
 {
-  gint bits;
   gboolean mono = FALSE;
 
   switch (format) {
     case GST_VIDEO_FORMAT_GRAY8:
-      bits = 8;
+      *bits = 8;
       *n_elems = 1;
       mono = TRUE;
       break;
     case GST_VIDEO_FORMAT_YUY2:
     case GST_VIDEO_FORMAT_YVYU:
     case GST_VIDEO_FORMAT_UYVY:
-      bits = 8;
+      *bits = 8;
       *n_elems = 1;
       *width = GST_ROUND_UP_4 (*width * 2);
       break;
     case GST_VIDEO_FORMAT_RGB:
     case GST_VIDEO_FORMAT_BGR:
     case GST_VIDEO_FORMAT_v308:
-      bits = 8;
+      *bits = 8;
       *n_elems = 3;
       break;
     case GST_VIDEO_FORMAT_AYUV:
@@ -1224,17 +1223,17 @@ get_functions (GstVideoScaler * hscale, GstVideoScaler * vscale,
     case GST_VIDEO_FORMAT_BGRA:
     case GST_VIDEO_FORMAT_ARGB:
     case GST_VIDEO_FORMAT_ABGR:
-      bits = 8;
+      *bits = 8;
       *n_elems = 4;
       break;
     case GST_VIDEO_FORMAT_ARGB64:
     case GST_VIDEO_FORMAT_AYUV64:
-      bits = 16;
+      *bits = 16;
       *n_elems = 4;
       break;
     case GST_VIDEO_FORMAT_GRAY16_LE:
     case GST_VIDEO_FORMAT_GRAY16_BE:
-      bits = 16;
+      *bits = 16;
       *n_elems = 1;
       mono = TRUE;
       break;
@@ -1243,13 +1242,13 @@ get_functions (GstVideoScaler * hscale, GstVideoScaler * vscale,
     case GST_VIDEO_FORMAT_NV21:
     case GST_VIDEO_FORMAT_NV24:
     case GST_VIDEO_FORMAT_NV61:
-      bits = 8;
+      *bits = 8;
       *n_elems = 2;
       break;
     default:
       return FALSE;
   }
-  if (bits == 8) {
+  if (*bits == 8) {
     switch (hscale ? hscale->resampler.max_taps : 0) {
       case 0:
         break;
@@ -1291,7 +1290,7 @@ get_functions (GstVideoScaler * hscale, GstVideoScaler * vscale,
         *vfunc = video_scale_v_ntap_u8;
         break;
     }
-  } else if (bits == 16) {
+  } else if (*bits == 16) {
     switch (hscale ? hscale->resampler.max_taps : 0) {
       case 0:
         break;
@@ -1338,7 +1337,7 @@ void
 gst_video_scaler_horizontal (GstVideoScaler * scale, GstVideoFormat format,
     gpointer src, gpointer dest, guint dest_offset, guint width)
 {
-  gint n_elems;
+  gint n_elems, bits;
   GstVideoScalerHFunc func = NULL;
 
   g_return_if_fail (scale != NULL);
@@ -1346,7 +1345,7 @@ gst_video_scaler_horizontal (GstVideoScaler * scale, GstVideoFormat format,
   g_return_if_fail (dest != NULL);
   g_return_if_fail (dest_offset + width <= scale->resampler.out_size);
 
-  if (!get_functions (scale, NULL, format, &func, NULL, &n_elems, &width)
+  if (!get_functions (scale, NULL, format, &func, NULL, &n_elems, &width, &bits)
       || func == NULL)
     goto no_func;
 
@@ -1380,7 +1379,7 @@ void
 gst_video_scaler_vertical (GstVideoScaler * scale, GstVideoFormat format,
     gpointer src_lines[], gpointer dest, guint dest_offset, guint width)
 {
-  gint n_elems;
+  gint n_elems, bits;
   GstVideoScalerVFunc func = NULL;
 
   g_return_if_fail (scale != NULL);
@@ -1388,7 +1387,7 @@ gst_video_scaler_vertical (GstVideoScaler * scale, GstVideoFormat format,
   g_return_if_fail (dest != NULL);
   g_return_if_fail (dest_offset < scale->resampler.out_size);
 
-  if (!get_functions (NULL, scale, format, NULL, &func, &n_elems, &width)
+  if (!get_functions (NULL, scale, format, NULL, &func, &n_elems, &width, &bits)
       || func == NULL)
     goto no_func;
 
@@ -1435,7 +1434,7 @@ gst_video_scaler_2d (GstVideoScaler * hscale, GstVideoScaler * vscale,
     gpointer dest, gint dest_stride, guint x, guint y,
     guint width, guint height)
 {
-  gint n_elems;
+  gint n_elems, bits;
   GstVideoScalerHFunc hfunc = NULL;
   GstVideoScalerVFunc vfunc = NULL;
   gint i;
@@ -1443,7 +1442,8 @@ gst_video_scaler_2d (GstVideoScaler * hscale, GstVideoScaler * vscale,
   g_return_if_fail (src != NULL);
   g_return_if_fail (dest != NULL);
 
-  if (!get_functions (hscale, vscale, format, &hfunc, &vfunc, &n_elems, &width))
+  if (!get_functions (hscale, vscale, format, &hfunc, &vfunc, &n_elems, &width,
+          &bits))
     goto no_func;
 
 #define LINE(s,ss,i)  ((guint8 *)(s) + ((i) * (ss)))
@@ -1455,7 +1455,7 @@ gst_video_scaler_2d (GstVideoScaler * hscale, GstVideoScaler * vscale,
       guint8 *s, *d;
 
       xo = x * n_elems;
-      xw = width * n_elems;
+      xw = width * n_elems * (bits / 8);
 
       s = LINE (src, src_stride, y) + xo;
       d = LINE (dest, dest_stride, y) + xo;
